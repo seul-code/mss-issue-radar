@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 개발용 샘플: 2026-10-06에 받은 중기부 보도자료 RSS(https://www.mss.go.kr/rss/smba/board/86.do)에서 앞 6건만 남김 -->
+<!-- 실제 형식 그대로: 요약(description) 없음, pubDate는 한국 시각 YYYYMMDDHHmmss -->
+<rss version="2.0">
+<channel>
+  <title><![CDATA[중소벤처기업부]]> <![CDATA[보도자료]]></title>
+  <link>https://www.mss.go.kr/</link>
+  <description><![CDATA[중소벤처기업부]]></description>
+  <departCode><![CDATA[650]]></departCode>
+
+	<item>
+		<title><![CDATA[거제‧통영 특별재난지역 소상공인‧중소기업 정책자금 금리 낮추고 상환기간 늘린다]]></title>
+		<link><![CDATA[https://www.mss.go.kr/site/smba/ex/bbs/View.do?cbIdx=86&bcIdx=1071601]]></link>
+		<pubDate><![CDATA[20261006091605]]></pubDate>
+		<id><![CDATA[86]]></id>
+	</item>
+
+	<item>
+		<title><![CDATA[글로벌 시장에서 K-브랜드 보호를 위한 중기부-지재처 협업 체계 가동]]></title>
+		<link><![CDATA[https://www.mss.go.kr/site/smba/ex/bbs/View.do?cbIdx=86&bcIdx=1071568]]></link>
+		<pubDate><![CDATA[20261002080546]]></pubDate>
+		<id><![CDATA[86]]></id>
+	</item>
+
+	<item>
+		<title><![CDATA[중기부-금융위, 모태펀드-국민성장펀드 제2차 이어달리기 합동 밋업(Meet-Up) 개최]]></title>
+		<link><![CDATA[https://www.mss.go.kr/site/smba/ex/bbs/View.do?cbIdx=86&bcIdx=1071558]]></link>
+		<pubDate><![CDATA[20261001135058]]></pubDate>
+		<id><![CDATA[86]]></id>
+	</item>
+
+	<item>
+		<title><![CDATA[지역성장펀드 제3호, ‘대전 D-성장펀드’ 540억원 규모로 출범]]></title>
+		<link><![CDATA[https://www.mss.go.kr/site/smba/ex/bbs/View.do?cbIdx=86&bcIdx=1071557]]></link>
+		<pubDate><![CDATA[20261001135005]]></pubDate>
+		<id><![CDATA[86]]></id>
+	</item>
+
+	<item>
+		<title><![CDATA[온누리상품권, 전통시장·지방상권 중점으로 18년 만에 개편]]></title>
+		<link><![CDATA[https://www.mss.go.kr/site/smba/ex/bbs/View.do?cbIdx=86&bcIdx=1071532]]></link>
+		<pubDate><![CDATA[20261001084243]]></pubDate>
+		<id><![CDATA[86]]></id>
+	</item>
+
+	<item>
+		<title><![CDATA[혁신 창업가의 첫 투자 도전, ｢도전의 IR 프로젝트｣ 본격 가동]]></title>
+		<link><![CDATA[https://www.mss.go.kr/site/smba/ex/bbs/View.do?cbIdx=86&bcIdx=1071531]]></link>
+		<pubDate><![CDATA[20261001082756]]></pubDate>
+		<id><![CDATA[86]]></id>
+	</item>
+
+</channel>
+</rss>
