@@ -227,7 +227,7 @@ interface RadarState {
 | `DATA_GO_KR_API_KEY` | 정책뉴스 API 인증키 (디코딩 키) | 사용자 (발급 후 `.env`) |
 | `BLOB_READ_WRITE_TOKEN` | Blob 사물함 열쇠 | Vercel이 배포 시 자동 |
 | `CRON_SECRET` | 자동 실행 주소 비밀번호 | 배포 단계에서 생성 |
-| `AI_MODE` | `live`일 때만 실제 OpenAI 호출, 그 외에는 가짜 응답 | 기본값 = 가짜 |
+| `AI_MODE` | `live`일 때만 실제 OpenAI 호출, 그 외에는 가짜 응답 | 개발 기본값 = 가짜, 배포 시 `live` 필수 |
 
 ---
 
@@ -261,6 +261,7 @@ vercel.json             # Cron 일정
 
 - 다른 코드는 `lib/storage/index.ts`만 부른다 → 나중에 저장소를 바꿔도 이 폴더만 고치면 된다.
 - 개발 중에는 `AI_MODE`가 없고 Blob 토큰도 없으므로 자동으로 가짜 응답 + 개발용 저장소로 동작한다.
+- **실제 서비스(`VERCEL_ENV=production`)에서는 가짜로 넘어가지 않는다.** `AI_MODE≠live`이거나 Blob 토큰·필수 키가 없으면 실행을 실패로 처리하고 이유를 기록한다 — 설정이 빠진 채 가짜 결과가 조용히 나가는 것 방지.
 
 ---
 

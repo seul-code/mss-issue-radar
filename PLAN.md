@@ -64,7 +64,7 @@ PRD의 must 2개(① 이슈 자동 수집·분석, ② 이슈 대시보드)를 �
 25. 승인을 받은 뒤 실제 OpenAI로 1회 실행해 결과 품질과 실제 비용을 확인한다.
 
 ### G. 배포와 측정
-26. 승인을 받은 뒤 GitHub에 올리고 Vercel에 배포한다(환경변수: OpenAI 키, 모델명, `CRON_SECRET`).
+26. 승인을 받은 뒤 GitHub에 올리고 Vercel에 배포한다(환경변수: `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_LIGHT_MODEL`, `DATA_GO_KR_API_KEY`, `CRON_SECRET`, `AI_MODE=live` + Blob 저장소 연결로 `BLOB_READ_WRITE_TOKEN` 자동 등록, OpenAI 콘솔 월 한도 $10 설정 확인).
 27. 배포 후 5일간 PRD 측정 방법대로 지표를 기록하고 성공 기준과 비교한다.
 
 ### H. nice — must 완료 후, 하나씩 승인받고 진행 (PRD 6장 순서)
