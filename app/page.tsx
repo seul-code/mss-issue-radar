@@ -1,5 +1,5 @@
 // Design Ref: §1 — 대시보드. 지금은 샘플 데이터를 쓰고, PLAN 23번에서 저장된 실제 결과로 바꾼다.
-import IssueCard from "@/components/IssueCard";
+import IssueBoard from "@/components/IssueBoard";
 import SummaryBar from "@/components/SummaryBar";
 import { normalState } from "@/lib/ai/__fixtures__/sample-states";
 import type { Importance, Issue } from "@/lib/types";
@@ -17,7 +17,6 @@ function sortIssues(issues: Issue[]): Issue[] {
 
 export default function Home() {
   const state = normalState;
-  // 분야 필터(PLAN 11번)는 다음 작업에서 붙인다.
   const issues = sortIssues(state.lastSuccess?.issues ?? []);
 
   return (
@@ -26,10 +25,8 @@ export default function Home() {
       <div className="mt-6">
         <SummaryBar result={state.lastSuccess} />
       </div>
-      <div className="mt-6 space-y-4">
-        {issues.map((issue) => (
-          <IssueCard key={issue.id} issue={issue} />
-        ))}
+      <div className="mt-6">
+        <IssueBoard issues={issues} />
       </div>
     </main>
   );
