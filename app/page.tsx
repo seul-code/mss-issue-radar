@@ -2,11 +2,23 @@
 import IssueCard from "@/components/IssueCard";
 import SummaryBar from "@/components/SummaryBar";
 import { normalState } from "@/lib/ai/__fixtures__/sample-states";
+import type { Importance, Issue } from "@/lib/types";
+
+const IMPORTANCE_RANK: Record<Importance, number> = { high: 0, medium: 1, low: 2 };
+
+/** PRD 5장: 중요도 높음 → 보통 → 낮음, 같으면 최신순(대표 출처 날짜 기준). 원본 배열은 바꾸지 않는다. */
+function sortIssues(issues: Issue[]): Issue[] {
+  return [...issues].sort(
+    (a, b) =>
+      IMPORTANCE_RANK[a.importance] - IMPORTANCE_RANK[b.importance] ||
+      Date.parse(b.publishedAt) - Date.parse(a.publishedAt),
+  );
+}
 
 export default function Home() {
   const state = normalState;
-  // 정렬(PLAN 10번)과 분야 필터(PLAN 11번)는 다음 작업에서 붙인다. 지금은 저장된 순서 그대로 보여준다.
-  const issues = state.lastSuccess?.issues ?? [];
+  // 분야 필터(PLAN 11번)는 다음 작업에서 붙인다.
+  const issues = sortIssues(state.lastSuccess?.issues ?? []);
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
