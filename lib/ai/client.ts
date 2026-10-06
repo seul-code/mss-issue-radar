@@ -60,6 +60,11 @@ export interface AiResult<T> {
   /** 응답 양식대로 읽은 결과. 형식·개수 검증은 호출한 쪽(lib/ai/validate.ts)이 한다. */
   data: T;
   mode: AiMode;
+  /**
+   * 웹 검색이 실제로 본 원문 주소 목록. AI가 지어낸 링크를 걸러내는 데 쓴다 (Design §6).
+   * 웹 검색을 쓰지 않았거나 가짜 모드면 null.
+   */
+  citedUrls: string[] | null;
   /** 비용 확인용 사용량 (가짜 모드에서는 0) */
   usage: { inputTokens: number; outputTokens: number };
 }
@@ -69,7 +74,11 @@ interface ResponsesApiBody {
   status?: string;
   error?: { message?: string } | null;
   incomplete_details?: { reason?: string } | null;
-  output?: { type: string; content?: { type: string; text?: string }[] }[];
+  output?: {
+    type: string;
+    content?: { type: string; text?: string; annotations?: { type: string; url?: string }[] }[];
+    action?: { sources?: { url?: string }[] };
+  }[];
   usage?: { input_tokens?: number; output_tokens?: number };
 }
 
@@ -83,10 +92,21 @@ function extractText(body: ResponsesApiBody): string {
     .join("");
 }
 
+/** 웹 검색이 본 출처 주소(검색 결과 목록 + 본문 인용 표시)를 모은다. */
+function extractCitedUrls(body: ResponsesApiBody): string[] {
+  const urls = (body.output ?? []).flatMap((item) => [
+    ...(item.action?.sources ?? []).map((source) => source.url),
+    ...(item.content ?? []).flatMap((part) =>
+      (part.annotations ?? []).filter((a) => a.type === "url_citation").map((a) => a.url),
+    ),
+  ]);
+  return [...new Set(urls.filter((url): url is string => typeof url === "string"))];
+}
+
 /** OpenAI를 한 번 부른다. 실패하면 오류를 던지고, 실패 기록은 자동 실행 쪽이 남긴다. */
 export async function callAi<T>(req: AiRequest<T>): Promise<AiResult<T>> {
   if (getAiMode() === "mock") {
-    return { data: req.mock(), mode: "mock", usage: { inputTokens: 0, outputTokens: 0 } };
+    return { data: req.mock(), mode: "mock", citedUrls: null, usage: { inputTokens: 0, outputTokens: 0 } };
   }
 
   const res = await fetch(OPENAI_URL, {
@@ -103,7 +123,9 @@ export async function callAi<T>(req: AiRequest<T>): Promise<AiResult<T>> {
       input: req.input,
       store: false, // 대화 기록을 OpenAI에 남기지 않는다.
       text: { format: { type: "json_schema", name: req.schema.name, schema: req.schema.schema, strict: true } },
-      ...(req.webSearch ? { tools: [{ type: "web_search" }], max_tool_calls: 1 } : {}),
+      ...(req.webSearch
+        ? { tools: [{ type: "web_search" }], max_tool_calls: 1, include: ["web_search_call.action.sources"] }
+        : {}),
     }),
   });
 
@@ -126,6 +148,7 @@ export async function callAi<T>(req: AiRequest<T>): Promise<AiResult<T>> {
   return {
     data,
     mode: "live",
+    citedUrls: req.webSearch ? extractCitedUrls(body) : null,
     usage: { inputTokens: body.usage?.input_tokens ?? 0, outputTokens: body.usage?.output_tokens ?? 0 },
   };
 }

@@ -9,12 +9,12 @@ export const EXCERPT_MAX = 300;
 const ALL_KEYWORDS = Object.values(CATEGORY_KEYWORDS).flat();
 
 /** 정부 자료인지 (대표 출처를 고를 때 정부 자료를 우선한다 — PRD 5장) */
-function isGovernment(item: RawItem): boolean {
+export function isGovernment(item: RawItem): boolean {
   return item.source === "mss-rss" || item.source === "policy-news";
 }
 
 /** 같은 기사인지 비교하기 위한 주소 정리: 앞뒤 공백, #뒤 조각, 끝의 / 를 없애고 도메인은 소문자로 */
-function normalizeUrl(url: string): string {
+export function normalizeUrl(url: string): string {
   try {
     const u = new URL(url.trim());
     u.hash = "";
