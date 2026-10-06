@@ -1,8 +1,8 @@
 // Design Ref: §2 처리 ⓒ·2 — 저가 모델에 보내는 지시문, 응답 양식(JSON Schema), 개발용 가짜 응답.
 // 지시문에는 PRD 5장 "AI가 지킬 규칙" 중 이 단계에 해당하는 것만 넣는다.
-import { CATEGORIES } from "@/lib/categories";
+import { CATEGORIES, CATEGORY_KEYWORDS } from "@/lib/categories";
 import type { AiRequest } from "@/lib/ai/client";
-import type { RawItem } from "@/lib/types";
+import type { Category, Importance, RawItem } from "@/lib/types";
 
 /** PRD 5장: 10개 분야를 묶은 웹 검색어 5개 (하루 최대 5회) */
 export const SEARCH_QUERIES = [
@@ -147,5 +147,109 @@ export function buildScreeningRequest(items: RawItem[]): AiRequest<ScreeningResp
     mock: () => ({
       groups: items.map((item, id) => ({ ids: [id], direct: item.source !== "web-search" })),
     }),
+  };
+}
+
+// ─────────────────────────────── 최종 분석 ───────────────────────────────
+
+/** 문구가 정해진 경우: 연결할 근거가 없을 때 연관성 칸에 쓰는 말 (PRD 5장) */
+export const NO_EVIDENCE_TEXT = "직접 연관된 정책은 확인 필요";
+
+export interface AnalysisResponse {
+  /**
+   * 후보 번호별 분석. 제목·날짜·출처·원문 주소는 AI에 맡기지 않고 코드가 후보에서 그대로 가져온다
+   * (지어낸 링크·제목 방지). 관련 없다고 판단한 번호는 빠질 수 있다.
+   */
+  issues: {
+    id: number;
+    categories: Category[];
+    importance: Importance;
+    summary: string;
+    relevance: string;
+    ideas: string[];
+    followUp: string | null;
+  }[];
+}
+
+const ANALYSIS_SCHEMA = {
+  type: "object",
+  properties: {
+    issues: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "integer" },
+          categories: { type: "array", items: { type: "string", enum: [...CATEGORIES] } },
+          importance: { type: "string", enum: ["high", "medium", "low"] },
+          summary: { type: "string" },
+          relevance: { type: "string" },
+          ideas: { type: "array", items: { type: "string" } },
+          followUp: { type: ["string", "null"] },
+        },
+        required: ["id", "categories", "importance", "summary", "relevance", "ideas", "followUp"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["issues"],
+  additionalProperties: false,
+};
+
+/** 개발용 가짜 분석: 키워드로 분야를 고르고, 정부 자료는 중요도 높음으로 둔다. */
+function mockAnalysis(items: RawItem[]): AnalysisResponse {
+  return {
+    issues: items.map((item, id) => {
+      const text = `${item.title} ${item.excerpt ?? ""}`;
+      const matched = CATEGORIES.filter((c) => CATEGORY_KEYWORDS[c].some((k) => text.includes(k)));
+      return {
+        id,
+        categories: matched.length > 0 ? matched.slice(0, 2) : ["중소기업"],
+        importance: item.source === "web-search" ? "medium" : "high",
+        summary: `[샘플 분석] ${item.title}`,
+        relevance: NO_EVIDENCE_TEXT,
+        ideas: ["형식 확인용 가상 아이디어"],
+        followUp: id % 2 === 0 ? "형식 확인용 가상 확인사항" : null,
+      };
+    }),
+  };
+}
+
+/** 최종 후보(최대 20건)를 한 번에 보내 이슈 카드 내용을 받는 요청 (상위 모델 1회) */
+export function buildAnalysisRequest(items: RawItem[]): AiRequest<AnalysisResponse> {
+  return {
+    tier: "main",
+    schema: { name: "issue_analysis", schema: ANALYSIS_SCHEMA },
+    instructions: [
+      "너는 대한민국 중소벤처기업부 공무원의 업무를 돕는 정책 분석 도우미다.",
+      "입력은 한 줄에 자료 하나다: 번호 | 정부/언론 | 발행처 | 발행 시각 | 제목 | 요약",
+      "각 자료를 이슈 카드 내용으로 정리해 번호(id)와 함께 답한다. 중기부와 관련 없다고 판단한 자료는 빼도 된다.",
+      "",
+      "[분야 categories]",
+      `- 다음 10개 중에서만 고른다: ${CATEGORIES.join(", ")}`,
+      "- 1개 또는 2개. 더 관련 깊은 분야를 먼저 쓴다.",
+      "",
+      "[중요도 importance]",
+      "- high: 중기부를 직접 언급했거나 정책·예산·법령이 바뀌는 경우 (예: 중기부 발표, 관련 법 개정, 예산 변경)",
+      "- medium: 관심 분야의 업계 동향 (예: 시장 통계, 업계 발표, 타 부처 정책)",
+      "- low: 간접적으로만 관련된 경우 (예: 일반 경제 뉴스 중 일부만 관련)",
+      "",
+      "[핵심내용 summary] 기사에 있는 사실만 2문장 이내로 쓴다. 해석이나 평가를 넣지 않는다.",
+      "",
+      "[중기부 연관성 relevance] 이 이슈가 중기부 업무와 어떻게 연결되는지 1~2문장으로 쓴다.",
+      `- 연결할 근거가 자료에 없으면 정확히 "${NO_EVIDENCE_TEXT}"라고 쓴다.`,
+      "",
+      "[업무 활용 아이디어 ideas] 담당 공무원이 해볼 수 있는 일을 최대 2개, 각각 한 문장으로 쓴다.",
+      "",
+      "[추가 확인사항 followUp] 원문에서 더 확인해야 할 점이 있으면 1개만 쓴다. 없으면 null.",
+      "",
+      "[반드시 지킬 것]",
+      "- 자료에 없는 정책명·사업명·수치는 절대 만들지 않는다.",
+      "- 일반인의 이름·연락처는 쓰지 않는다. 기관명·기업명·공인의 공식 발언은 쓸 수 있다.",
+      "- 입력에 없는 번호는 쓰지 않고, 한 번호에는 한 번만 답한다.",
+      "- 모든 문장은 한국어로, 간결한 보고서 문체로 쓴다.",
+    ].join("\n"),
+    input: items.map(candidateLine).join("\n"),
+    mock: () => mockAnalysis(items),
   };
 }
