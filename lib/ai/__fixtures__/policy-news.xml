@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 개발용 샘플: 2026-10-08에 받은 정책브리핑 정책뉴스 API(policyNewsService2/policyNewsList2) 응답에서 4건만 남김 -->
+<!-- 본문(DataContents)은 첫 문단만 남겼다. 실제 응답에는 기사 전문이 HTML로 온다. fact 1건은 제외 대상 예시 -->
+<response>
+  <header>
+    <resultCode>0</resultCode>
+    <resultMsg>NORMAL_SERVICE</resultMsg>
+  </header>
+  <body>
+    <NewsItem>
+      <NewsItemId>148973229</NewsItemId>
+      <ContentsStatus>U</ContentsStatus>
+      <ModifyId>11</ModifyId>
+      <ModifyDate>10/08/2026 17:10:15</ModifyDate>
+      <ApproveDate>10/08/2026 17:10:00</ApproveDate>
+      <EmbargoDate/>
+      <GroupingCode>policy</GroupingCode>
+      <Title><![CDATA[정부, 어구·어법 조업방식 규제 2031년까지 절반으로 줄인다]]></Title>
+      <SubTitle1><![CDATA[한성숙 국무총리, 제15회 국가정책조정회의 주재<br>행정기관 비긴급 상담번호, 단계적으로 110 통합 등]]></SubTitle1>
+      <SubTitle2/>
+      <SubTitle3/>
+      <ContentsType>H</ContentsType>
+      <DataContents><![CDATA[<p>어구·어법 등 조업방식 규제가 2031년까지 절반으로 줄어들고, 비긴급 상담번호 중 34개 중앙행정기관 대표 상담번호가 단계적으로 110으로 통합된다.</p>]]></DataContents>
+      <MinisterCode>국무조정실</MinisterCode>
+      <OriginalUrl><![CDATA[https://www.korea.kr/news/policyNewsView.do?newsId=148973229&call_from=openData]]></OriginalUrl>
+      <KoglType><![CDATA[1]]></KoglType>
+    </NewsItem>
+    <NewsItem>
+      <NewsItemId>148973160</NewsItemId>
+      <ContentsStatus>U</ContentsStatus>
+      <ModifyId>7</ModifyId>
+      <ModifyDate>10/07/2026 17:56:21</ModifyDate>
+      <ApproveDate>10/07/2026 17:56:00</ApproveDate>
+      <EmbargoDate/>
+      <GroupingCode>policy</GroupingCode>
+      <Title><![CDATA[민·관 협력 'K-브랜드 정부인증제도' 본격 시행…가짜 퇴출]]></Title>
+      <SubTitle1><![CDATA[기업 제품에 국가인증상표 부착·정품인증기술 적용 등 적극 대응<br>중소·중견기업에 정품인증기술 도입 비용 최대 2억 원까지 지원]]></SubTitle1>
+      <SubTitle2/>
+      <SubTitle3/>
+      <ContentsType>H</ContentsType>
+      <DataContents><![CDATA[<p>정부가 해외에서 확산하고 있는 가짜 K-브랜드를 강력하게 차단하기 위해 민·관 협력으로&nbsp; 'K-브랜드 정부인증제도'를 본격 시행한다.</p>]]></DataContents>
+      <MinisterCode>지식재산처</MinisterCode>
+      <OriginalUrl><![CDATA[https://www.korea.kr/news/policyNewsView.do?newsId=148973160&call_from=openData]]></OriginalUrl>
+      <KoglType><![CDATA[1]]></KoglType>
+    </NewsItem>
+    <NewsItem>
+      <NewsItemId>148973140</NewsItemId>
+      <ContentsStatus>U</ContentsStatus>
+      <ModifyId>27</ModifyId>
+      <ModifyDate>10/07/2026 17:12:57</ModifyDate>
+      <ApproveDate>10/07/2026 17:12:00</ApproveDate>
+      <EmbargoDate/>
+      <GroupingCode>policy</GroupingCode>
+      <Title><![CDATA[산업부, 국감 지적 반영해 산업기술 유출 방지 총력]]></Title>
+      <SubTitle1><![CDATA[기술유출 방지 보안강화 지원…기술유출 불법수익 몰수 대상 확대<br>관계기관 정보공유 활성화…산업기술보호 종합계획·법 개정 추진]]></SubTitle1>
+      <SubTitle2/>
+      <SubTitle3/>
+      <ContentsType>H</ContentsType>
+      <DataContents><![CDATA[<p>산업통상부가 기술유출에 취약한 중소기업과 대학 등의 보안 역량을 강화하기 위해 보안설비 구축과 컨설팅 등 지원을 확대하기로 했다.</p>]]></DataContents>
+      <MinisterCode>산업통상부</MinisterCode>
+      <OriginalUrl><![CDATA[https://www.korea.kr/news/policyNewsView.do?newsId=148973140&call_from=openData]]></OriginalUrl>
+      <KoglType><![CDATA[1]]></KoglType>
+    </NewsItem>
+    <NewsItem>
+      <NewsItemId>148973215</NewsItemId>
+      <ContentsStatus>U</ContentsStatus>
+      <ModifyId>1</ModifyId>
+      <ModifyDate>10/08/2026 15:30:22</ModifyDate>
+      <ApproveDate>10/08/2026 15:17:13</ApproveDate>
+      <EmbargoDate/>
+      <GroupingCode>fact</GroupingCode>
+      <Title><![CDATA[[사실은 이렇습니다] (보도설명) 미래대응기금은 청년, 성장동력, 지방, 교육&middot;인재 4대 계정에 맞는 사업을 편성했고, 공공기관 지방이전 사업은 지방계정 사업 목적에 부합합니다.]]></Title>
+      <SubTitle1/>
+      <SubTitle2/>
+      <SubTitle3/>
+      <ContentsType>H</ContentsType>
+      <DataContents><![CDATA[<p><span style="color: rgb(33, 37, 41); font-family: Arimo, sans-serif; font-size: 15px; background-color: rgb(255, 255, 255);">2026.10.8.(목) 동아일보 「'미래대응기금' 지출 보니... 공공기관 보너스 1,000억, 장차관 관사에 57억」, 한국일보&nbsp;</span><span style="background-color: rgb(255, 255, 255); color: rgb(33, 37, 41); font-family: Arimo, sans-serif; font-size: 15px;">「'장관 관사'가 미래 먹거리?... 미래기금 '쌈짓돈' 논란」</span><span style="background-color: rgb(255, 255, 255); color: rgb(33, 37, 41); font-family: Arimo, sans-serif; font-size: 15px;">&nbsp;등 기사 관련입니다.</span></p>]]></DataContents>
+      <MinisterCode>기획예산처</MinisterCode>
+      <OriginalUrl><![CDATA[https://www.korea.kr/briefing/actuallyView.do?newsId=148973215&call_from=openData]]></OriginalUrl>
+      <KoglType><![CDATA[1]]></KoglType>
+    </NewsItem>
+    <totalCount>4</totalCount>
+  </body>
+</response>
