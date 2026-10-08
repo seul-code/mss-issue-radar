@@ -1,5 +1,6 @@
 // Design Ref: §2 처리 5 — Vercel Blob 저장소 (무료 한도 안). 파일 1개에 RadarState 전체를 담는다.
 // 다른 코드는 이 파일을 직접 쓰지 않고 lib/storage/index.ts 를 거친다 (CLAUDE.md 3장).
+// 저장소는 "Private"로 만든다: 주소를 알아도 토큰 없이는 열 수 없고, 아래의 캐시 우회 읽기는 Private에서만 동작한다.
 import { get, put } from "@vercel/blob";
 import type { RadarState } from "@/lib/types";
 
@@ -11,7 +12,7 @@ const PATHNAME = "issue-radar/state.json";
  * 덮어쓴 직후에도 최신 내용을 읽도록 CDN 캐시를 거치지 않고 원본에서 읽는다 (Design §9 Blob 지연 문제).
  */
 export async function readBlobState(): Promise<RadarState | null> {
-  const result = await get(PATHNAME, { access: "public", useCache: false });
+  const result = await get(PATHNAME, { access: "private", useCache: false });
   if (!result || result.statusCode !== 200) return null;
   return (await new Response(result.stream).json()) as RadarState;
 }
@@ -19,7 +20,7 @@ export async function readBlobState(): Promise<RadarState | null> {
 /** 상태 전체를 덮어쓴다. */
 export async function writeBlobState(state: RadarState): Promise<void> {
   await put(PATHNAME, JSON.stringify(state), {
-    access: "public",
+    access: "private",
     addRandomSuffix: false,
     allowOverwrite: true,
     contentType: "application/json",

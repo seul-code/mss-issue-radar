@@ -1,4 +1,5 @@
-// Design Ref: §1 — 대시보드. 지금은 샘플 데이터를 쓰고, PLAN 23번에서 저장된 실제 결과로 바꾼다.
+// Design Ref: §1, §2 처리 6 — 대시보드. 저장소에 있는 마지막 결과를 읽기만 한다 (방문 시 AI 호출 없음).
+// 화면은 미리 만들어 두고, 자동 실행이 저장을 마치면 revalidatePath("/")로 새로 만든다.
 import IssueBoard from "@/components/IssueBoard";
 import StatusBanner from "@/components/StatusBanner";
 import SummaryBar from "@/components/SummaryBar";
@@ -8,7 +9,14 @@ import {
   noneState,
   normalState,
 } from "@/lib/ai/__fixtures__/sample-states";
+import { getState } from "@/lib/storage";
 import type { Importance, Issue, RadarState } from "@/lib/types";
+
+/**
+ * 자동 실행 후 갱신 신호를 놓쳐도 최대 1시간 안에는 새 결과를 읽도록 하는 안전장치.
+ * 갱신은 방문이 있을 때만 일어나고 저장소 읽기 1회뿐이라 무료 한도에 영향이 거의 없다.
+ */
+export const revalidate = 3600;
 
 const IMPORTANCE_RANK: Record<Importance, number> = { high: 0, medium: 1, low: 2 };
 
@@ -32,7 +40,8 @@ const DEMO_STATES: Record<string, RadarState> = {
 export default async function Home({ searchParams }: PageProps<"/">) {
   // 배포(프로덕션)에서는 주소 뒤의 ?demo= 를 읽지 않는다. 그래서 화면을 미리 만들어 두는 방식이 유지된다.
   const demo = process.env.NODE_ENV === "development" ? (await searchParams).demo : undefined;
-  const state = (typeof demo === "string" && DEMO_STATES[demo]) || normalState;
+  // 저장소를 읽지 못하면 오류를 그대로 둔다. 화면을 다시 만드는 중에 실패하면 Next.js가 직전 화면을 계속 보여준다.
+  const state = (typeof demo === "string" && DEMO_STATES[demo]) || (await getState());
   const issues = sortIssues(state.lastSuccess?.issues ?? []);
 
   return (
