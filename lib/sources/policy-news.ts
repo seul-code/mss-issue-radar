@@ -2,41 +2,18 @@
 // 전 부처 정책뉴스가 오므로 관련 기사 고르기는 전처리(키워드)와 AI 1차 선별이 한다.
 // 이 파일은 서버에서만 쓴다. 인증키는 .env의 DATA_GO_KR_API_KEY에서 읽고 오류 메시지·로그에 남기지 않는다.
 import { EXCERPT_MAX } from "@/lib/sources/preprocess";
+import { decodeEntities, kstToIso, readTag, toPlainText } from "@/lib/sources/xml";
 import type { RawItem } from "@/lib/types";
 
 export const POLICY_NEWS_URL = "https://apis.data.go.kr/1371000/policyNewsService2/policyNewsList2";
 const TIMEOUT_MS = 20_000;
-
-/** 자주 나오는 HTML 문자 표기를 글자로 바꾼다 (&middot; → · 등) */
-function decodeEntities(text: string): string {
-  const named: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", middot: "·", hellip: "…", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”" };
-  return text
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
-    .replace(/&([a-z]+);/gi, (whole, name) => named[name.toLowerCase()] ?? whole);
-}
-
-/** HTML 태그를 지우고 공백을 정리한 순수 글자 */
-function toPlainText(html: string): string {
-  return decodeEntities(html.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, " "))
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/** <tag><![CDATA[값]]></tag> 또는 <tag>값</tag> 에서 값을 꺼낸다. */
-function readTag(block: string, tag: string): string | undefined {
-  const match = block.match(new RegExp(`<${tag}>\\s*(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([\\s\\S]*?))\\s*</${tag}>`));
-  const value = (match?.[1] ?? match?.[2])?.trim();
-  return value || undefined;
-}
 
 /** 승인 시각("10/08/2026 17:10:00", 한국 시각)을 UTC ISO 문자열로 바꾼다 (Design §2.1). */
 export function approveDateToIso(text: string): string | undefined {
   const m = text.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/);
   if (!m) return undefined;
   const [, mo, d, y, h, mi, s] = m;
-  const date = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}+09:00`);
-  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+  return kstToIso(y, mo, d, h, mi, s);
 }
 
 /**

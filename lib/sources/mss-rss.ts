@@ -1,17 +1,11 @@
 // Design Ref: §2 입력 ⓐ — 중기부 보도자료 RSS 수집기 (무료, 키 없음).
 // RSS 구조가 단순해 별도 라이브러리 없이 정규식으로 읽는다 (Design §3 "쓰지 않는 것").
+import { kstToIso, readTag } from "@/lib/sources/xml";
 import type { RawItem } from "@/lib/types";
 
 export const MSS_RSS_URL = "https://www.mss.go.kr/rss/smba/board/86.do";
 const PUBLISHER = "중소벤처기업부";
 const TIMEOUT_MS = 15_000;
-
-/** <tag><![CDATA[값]]></tag> 또는 <tag>값</tag> 에서 값을 꺼낸다. */
-function readTag(block: string, tag: string): string | undefined {
-  const match = block.match(new RegExp(`<${tag}>\\s*(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([\\s\\S]*?))\\s*</${tag}>`));
-  const value = (match?.[1] ?? match?.[2])?.trim();
-  return value || undefined;
-}
 
 /**
  * 중기부 RSS 날짜(한국 시각 "20261006091605")를 UTC ISO 문자열로 바꾼다.
@@ -21,8 +15,7 @@ export function kstStampToIso(stamp: string): string | undefined {
   const m = stamp.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/);
   if (!m) return undefined;
   const [, y, mo, d, h, mi, s] = m;
-  const date = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}+09:00`);
-  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+  return kstToIso(y, mo, d, h, mi, s);
 }
 
 /** RSS 문서(XML 문자열)를 기사 목록으로 바꾼다. 원문 주소나 날짜가 없는 항목은 버린다. */

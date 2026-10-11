@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 개발용 샘플: 2026-10-12에 받은 연합뉴스 경제 RSS에서 관련 기사 3건만 남김 -->
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"  xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:media="http://search.yahoo.com/mrss/" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:sy="http://purl.org/rss/1.0/modules/syndication/">
+	<channel>
+		<title><![CDATA[연합뉴스 경제 최신기사]]></title>
+		<link>https://www.yna.co.kr/economy/all</link>
+		<atom:link href="https://www.yna.co.kr/rss/economy.xml" rel="self" type="application/rss+xml" />
+		<description><![CDATA[연합뉴스 실시간 경제 최신뉴스입니다]]></description>
+		<language>ko-KR</language>
+		<copyright><![CDATA[저작권자(c) 연합뉴스, 무단 전재-재배포, AI 학습 및 활용 금지]]></copyright>
+		<sy:updatePeriod>hourly</sy:updatePeriod>
+		<sy:updateFrequency>1</sy:updateFrequency>
+		<lastBuildDate>Mon, 12 Oct 2026 07:30:00 +0900</lastBuildDate>
+		<pubDate>Mon, 12 Oct 2026 07:30:00 +0900</pubDate>
+		<item>
+			<title><![CDATA[중기부, '모두의창업' 솔루션 기업 50곳 공개…"창업 준비 지원"]]></title>
+			<link>https://www.yna.co.kr/view/AKR20261009020400030</link>
+			<guid isPermaLink="true">https://www.yna.co.kr/view/AKR20261009020400030</guid>
+			<pubDate>Sun, 11 Oct 2026 12:00:04 +0900</pubDate>
+			<dc:creator>이상서</dc:creator>
+			<description><![CDATA[(서울=연합뉴스) 이상서 기자 = 중소벤처기업부는 &apos;2차 모두의 창업 프로젝트&apos; 도전자의 아이디어 구체화와 사업 모델 고도화를 지원할 인공지능(...]]></description>
+			<media:content url="https://img.yna.co.kr/photo/yna/YH/2026/09/08/PYH2026090818390001300_P2.jpg" type="image/jpeg">
+			</media:content>
+		</item>
+		<item>
+			<title><![CDATA[중기부·국세청, AI 기업 2천559개사 성장·세정지원 연계]]></title>
+			<link>https://www.yna.co.kr/view/AKR20261009033600030</link>
+			<guid isPermaLink="true">https://www.yna.co.kr/view/AKR20261009033600030</guid>
+			<pubDate>Sun, 11 Oct 2026 12:00:04 +0900</pubDate>
+			<dc:creator>구정모</dc:creator>
+			<description><![CDATA[(서울=연합뉴스) 구정모 기자 = 중소벤처기업부와 국세청은 인공지능(AI) 중소기업·스타트업 2천559개사에 기술개발·사업화 지원과 세정지원을 ...]]></description>
+			<media:content url="https://img.yna.co.kr/photo/cms/2023/03/20/54/PCM20230320000254990_P2.jpg" type="image/jpeg">
+			</media:content>
+		</item>
+		<item>
+			<title><![CDATA[서울창업허브 공덕 입주할 유망 스타트업 27곳 모집]]></title>
+			<link>https://www.yna.co.kr/view/AKR20261011014600004</link>
+			<guid isPermaLink="true">https://www.yna.co.kr/view/AKR20261011014600004</guid>
+			<pubDate>Sun, 11 Oct 2026 11:15:01 +0900</pubDate>
+			<dc:creator>김준태</dc:creator>
+			<description><![CDATA[(서울=연합뉴스) 김준태 기자 = 서울시와 서울경제진흥원(SBA)은 오는 16일까지 2026년 하반기 서울창업허브 공덕 입주기업 27곳을 모집한...]]></description>
+			<media:content url="https://img.yna.co.kr/etc/inner/KR/2026/10/11/AKR20261011014600004_01_i_P2.jpg" type="image/jpeg">
+			</media:content>
+		</item>
+	</channel>
+</rss>

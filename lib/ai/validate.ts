@@ -1,39 +1,12 @@
 // Design Ref: §2 처리 2·4, §6 — AI 응답 검증 (코드, 비용 0). AI가 준 답을 그대로 믿지 않고 규칙대로 거른다.
 // CLAUDE.md 6장: AI 응답은 화면·다음 단계에 쓰기 전에 코드로 형식과 개수를 검증한다.
-import { NO_EVIDENCE_TEXT, type AnalysisResponse, type ScreeningResponse, type SearchResponse } from "@/lib/ai/prompts";
+import { NO_EVIDENCE_TEXT, type AnalysisResponse, type ScreeningResponse } from "@/lib/ai/prompts";
 import { CATEGORIES } from "@/lib/categories";
-import { isGovernment, normalizeUrl } from "@/lib/sources/preprocess";
+import { isGovernment } from "@/lib/sources/preprocess";
 import type { Category, Importance, Issue, RawItem } from "@/lib/types";
 
 /** PRD 5장: 하루 이슈는 최대 20개 */
 export const MAX_ISSUES = 20;
-
-/**
- * 웹 검색 응답을 기사 목록으로 바꾼다.
- * - 원문 주소가 http(s)가 아니거나, 날짜를 알 수 없으면 버린다 (Design §2.1)
- * - citedUrls가 있으면(실제 호출) 웹 검색이 실제로 본 주소만 남긴다 — 지어낸 링크 차단 (Design §6)
- */
-export function searchToRawItems(response: SearchResponse, citedUrls: string[] | null): RawItem[] {
-  const cited = citedUrls ? new Set(citedUrls.map(normalizeUrl)) : null;
-  const items: RawItem[] = [];
-
-  for (const article of response.articles ?? []) {
-    const url = article.url?.trim();
-    const time = article.publishedAt ? Date.parse(article.publishedAt) : NaN;
-    if (!article.title?.trim() || !url || !/^https?:\/\//.test(url) || Number.isNaN(time)) continue;
-    if (cited && !cited.has(normalizeUrl(url))) continue;
-
-    items.push({
-      source: "web-search",
-      title: article.title.trim(),
-      url,
-      publisher: article.publisher?.trim() || "언론",
-      publishedAt: new Date(time).toISOString(),
-      excerpt: article.summary?.trim() || undefined,
-    });
-  }
-  return items;
-}
 
 export interface ScreeningResult {
   /** 2단계 분석으로 보낼 대표 자료 (최대 20건) */

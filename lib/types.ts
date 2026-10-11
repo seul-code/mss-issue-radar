@@ -21,7 +21,7 @@ export type Importance = "high" | "medium" | "low";
 export type SourceType =
   | "mss-rss" // 중기부 보도자료 RSS
   | "policy-news" // 정책브리핑 정책뉴스 API
-  | "web-search"; // AI 웹 검색
+  | "news-rss"; // 언론사 RSS (연합뉴스·뉴시스)
 
 /** 수집 직후의 자료 한 건. AI 분석 전 단계에서만 쓴다. */
 export interface RawItem {

@@ -38,7 +38,7 @@ function preferred(a: RawItem, b: RawItem): RawItem {
   return Date.parse(a.publishedAt) <= Date.parse(b.publishedAt) ? a : b;
 }
 
-/** 키워드가 하나라도 들어 있는지 (정책뉴스는 전 부처 소식이라 먼저 거른다) */
+/** 키워드가 하나라도 들어 있는지 (정책뉴스·언론 기사는 범위가 넓어 먼저 거른다. 중기부 보도자료는 거르지 않음) */
 function hasKeyword(item: RawItem): boolean {
   const text = `${item.title} ${item.excerpt ?? ""}`;
   return ALL_KEYWORDS.some((keyword) => text.includes(keyword));
@@ -53,7 +53,7 @@ export interface PreprocessOptions {
 
 /**
  * 수집한 자료를 AI에 보낼 후보로 정리한다.
- * 1) 원문 주소·날짜가 올바른 것만 → 2) 기간 안의 것만 → 3) 정책뉴스는 키워드 포함만
+ * 1) 원문 주소·날짜가 올바른 것만 → 2) 기간 안의 것만 → 3) 정책뉴스·언론 기사는 키워드 포함만
  * → 4) 같은 주소·같은 제목은 하나로 → 5) 본문 앞부분은 300자로 자름 → 최신순 정렬
  */
 export function preprocess(items: RawItem[], { now, windowHours }: PreprocessOptions): RawItem[] {
@@ -64,7 +64,7 @@ export function preprocess(items: RawItem[], { now, windowHours }: PreprocessOpt
     const time = Date.parse(item.publishedAt);
     if (!/^https?:\/\//.test(item.url.trim()) || Number.isNaN(time)) return false;
     if (time < start || time > end) return false;
-    if (item.source === "policy-news" && !hasKeyword(item)) return false;
+    if (item.source !== "mss-rss" && !hasKeyword(item)) return false;
     return true;
   });
 

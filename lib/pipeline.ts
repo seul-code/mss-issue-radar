@@ -2,9 +2,10 @@
 // 저장과 하루 1회 중복 방지는 자동 실행 주소(app/api/cron)가 맡는다. 이 함수는 결과를 만들기만 한다.
 // 실패하면 오류를 던진다. 호출한 쪽이 "실패"로 기록하고 직전 결과를 유지한다 (Design §5).
 import { callAi, getAiMode, type AiMode } from "@/lib/ai/client";
-import { buildAnalysisRequest, buildScreeningRequest, buildSearchRequest, SEARCH_QUERIES } from "@/lib/ai/prompts";
-import { analysisToIssues, pickCandidates, searchToRawItems } from "@/lib/ai/validate";
+import { buildAnalysisRequest, buildScreeningRequest } from "@/lib/ai/prompts";
+import { analysisToIssues, pickCandidates } from "@/lib/ai/validate";
 import { fetchMssRss } from "@/lib/sources/mss-rss";
+import { fetchNewsRss } from "@/lib/sources/news-rss";
 import { fetchPolicyNews } from "@/lib/sources/policy-news";
 import { preprocess } from "@/lib/sources/preprocess";
 import type { Issue, RawItem } from "@/lib/types";
@@ -16,9 +17,10 @@ const MIN_ISSUES_BEFORE_EXPANSION = 5;
 export interface Collectors {
   mss: () => Promise<RawItem[]>;
   policyNews: (now: Date) => Promise<RawItem[]>;
+  news: () => Promise<{ items: RawItem[]; errors: string[] }>;
 }
 
-const DEFAULT_COLLECTORS: Collectors = { mss: fetchMssRss, policyNews: fetchPolicyNews };
+const DEFAULT_COLLECTORS: Collectors = { mss: fetchMssRss, policyNews: fetchPolicyNews, news: fetchNewsRss };
 
 export interface PipelineResult {
   /** success = 이슈 1건 이상, empty = 관련 이슈 0건 (주말·공휴일) */
@@ -28,7 +30,7 @@ export interface PipelineResult {
   stats: {
     mode: AiMode;
     windowHours: 24 | 48;
-    collected: { mss: number; policyNews: number; webSearch: number };
+    collected: { mss: number; policyNews: number; news: number };
     /** 실패한 출처와 이유 (키 값은 포함되지 않음) */
     sourceErrors: string[];
     candidates: number;
@@ -65,11 +67,11 @@ export async function runDailyPipeline(
     usage.outputTokens += u.outputTokens;
   };
 
-  // ── 1. 수집: 정부 자료 2곳 + 웹 검색 5회를 동시에. 한 곳이 실패해도 나머지로 계속 간다.
-  const [mssResult, policyResult, ...searchResults] = await Promise.allSettled([
+  // ── 1. 수집: 정부 자료 2곳 + 언론사 RSS를 동시에 (모두 무료, AI 호출 없음). 한 곳이 실패해도 계속 간다.
+  const [mssResult, policyResult, newsResult] = await Promise.allSettled([
     collectors.mss(),
     collectors.policyNews(now),
-    ...SEARCH_QUERIES.map((query) => callAi(buildSearchRequest(query, now))),
+    collectors.news(),
   ]);
 
   const sourceErrors: string[] = [];
@@ -78,25 +80,18 @@ export async function runDailyPipeline(
   if (mssResult.status === "rejected" && policyResult.status === "rejected") {
     throw new GovernmentSourcesError(`정부 자료 수집 실패 — ${sourceErrors.join(" / ")}`);
   }
+  if (newsResult.status === "rejected") sourceErrors.push(`언론사 RSS: ${reason(newsResult)}`);
+  else sourceErrors.push(...newsResult.value.errors.map((error) => `언론사 RSS: ${error}`));
 
-  const government = [
+  const collected = [
     ...(mssResult.status === "fulfilled" ? mssResult.value : []),
     ...(policyResult.status === "fulfilled" ? policyResult.value : []),
+    ...(newsResult.status === "fulfilled" ? newsResult.value.items : []),
   ];
-  const webItems: RawItem[] = [];
-  searchResults.forEach((result, index) => {
-    if (result.status === "fulfilled") {
-      addUsage(result.value.usage);
-      webItems.push(...searchToRawItems(result.value.data, result.value.citedUrls));
-    } else {
-      sourceErrors.push(`웹 검색(${SEARCH_QUERIES[index]}): ${reason(result)}`);
-    }
-  });
 
   // ── 2. 전처리 + 1차 선별 (24시간)
   const screen = async (windowHours: 24 | 48) => {
-    // 웹 검색은 다시 하지 않는다. 48시간 확장은 정부 자료 기간만 넓히는 효과다 (Design §2).
-    const items = preprocess([...government, ...webItems], { now, windowHours });
+    const items = preprocess(collected, { now, windowHours });
     if (items.length === 0) return { candidates: [], relevantCount: 0 };
     const response = await callAi(buildScreeningRequest(items));
     addUsage(response.usage);
@@ -118,7 +113,7 @@ export async function runDailyPipeline(
     collected: {
       mss: mssResult.status === "fulfilled" ? mssResult.value.length : 0,
       policyNews: policyResult.status === "fulfilled" ? policyResult.value.length : 0,
-      webSearch: webItems.length,
+      news: newsResult.status === "fulfilled" ? newsResult.value.items.length : 0,
     },
     sourceErrors,
     candidates: screening.candidates.length,
