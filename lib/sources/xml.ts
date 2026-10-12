@@ -9,7 +9,7 @@ export function readTag(block: string, tag: string): string | undefined {
 
 /** 자주 나오는 HTML 문자 표기를 글자로 바꾼다 (&middot; → · 등) */
 export function decodeEntities(text: string): string {
-  const named: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", middot: "·", hellip: "…", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”" };
+  const named: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", middot: "·", hellip: "…", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", rarr: "→", larr: "←", uarr: "↑", darr: "↓", sim: "~", bull: "•", times: "×", ndash: "–", mdash: "—" };
   return text
     .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
     .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
@@ -19,6 +19,22 @@ export function decodeEntities(text: string): string {
 /** HTML 태그를 지우고 공백을 정리한 순수 글자 */
 export function toPlainText(html: string): string {
   return decodeEntities(html.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * AI에 보내기 전에 본문에서 개인 연락처를 지운다 (PRD 7장).
+ * 전화번호·이메일, 기사 앞머리의 "(서울=연합뉴스) 홍길동 기자 =", 사진 설명 "[사진=…]",
+ * 보도자료 끝의 "…에게 연락주시기 바랍니다" 담당자 안내 문장.
+ */
+export function stripContacts(text: string): string {
+  return text
+    .replace(/^[[(][^\])]{0,30}[\])]\s*[^=]{0,40}?기자\s*=\s*/, "")
+    .replace(/\[사진[^\]]{0,80}\]/g, "")
+    .replace(/[^.。]{0,200}연락\s*주시기\s*바랍니다\.?/g, "")
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "")
+    .replace(/\(?\b0\d{1,2}[-.)\s]?\d{3,4}[-.\s]?\d{4}\b\)?/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }

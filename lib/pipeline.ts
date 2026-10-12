@@ -1,13 +1,14 @@
-// Design Ref: §2 데이터 흐름 — 하루 1회 실행: 수집 → 전처리 → 1차 선별 → (48시간 확장) → 분석 → 검증.
+// Design Ref: §2 데이터 흐름 — 하루 1회 실행: 수집 → 전처리 → 1차 선별 → (48시간 확장) → 보도자료 본문 → 분석 → 검증.
 // 저장과 하루 1회 중복 방지는 자동 실행 주소(app/api/cron)가 맡는다. 이 함수는 결과를 만들기만 한다.
 // 실패하면 오류를 던진다. 호출한 쪽이 "실패"로 기록하고 직전 결과를 유지한다 (Design §5).
 import { callAi, getAiMode, type AiMode } from "@/lib/ai/client";
 import { buildAnalysisRequest, buildScreeningRequest } from "@/lib/ai/prompts";
 import { analysisToIssues, pickCandidates } from "@/lib/ai/validate";
+import { fetchMssDetail } from "@/lib/sources/mss-detail";
 import { fetchMssRss } from "@/lib/sources/mss-rss";
 import { fetchNewsRss } from "@/lib/sources/news-rss";
 import { fetchPolicyNews } from "@/lib/sources/policy-news";
-import { preprocess } from "@/lib/sources/preprocess";
+import { DETAIL_MAX, preprocess } from "@/lib/sources/preprocess";
 import type { Issue, RawItem } from "@/lib/types";
 
 /** PRD 5장: 24시간 안의 이슈가 5건 미만이면 48시간까지 넓힌다. */
@@ -18,9 +19,16 @@ export interface Collectors {
   mss: () => Promise<RawItem[]>;
   policyNews: (now: Date) => Promise<RawItem[]>;
   news: () => Promise<{ items: RawItem[]; errors: string[] }>;
+  /** 중기부 보도자료 본문 읽기 (최종 후보만) */
+  mssDetail: (url: string) => Promise<string | undefined>;
 }
 
-const DEFAULT_COLLECTORS: Collectors = { mss: fetchMssRss, policyNews: fetchPolicyNews, news: fetchNewsRss };
+const DEFAULT_COLLECTORS: Collectors = {
+  mss: fetchMssRss,
+  policyNews: fetchPolicyNews,
+  news: fetchNewsRss,
+  mssDetail: fetchMssDetail,
+};
 
 export interface PipelineResult {
   /** success = 이슈 1건 이상, empty = 관련 이슈 0건 (주말·공휴일) */
@@ -127,10 +135,21 @@ export async function runDailyPipeline(
     return { status: "empty", issues: [], stats: { ...stats, aiCalls } };
   }
 
-  // ── 5. 분석 (상위 모델 1회) + 검증
-  const analysis = await callAi(buildAnalysisRequest(screening.candidates));
+  // ── 5. 중기부 보도자료 본문 읽기: RSS에 본문이 없어 최종 후보로 뽑힌 것만 원문 페이지를 읽는다 (PRD 6장 예외).
+  //       실패하면 기존 본문(같은 사건 언론 기사)이나 제목만으로 진행한다.
+  const candidates = await Promise.all(
+    screening.candidates.map(async (item) => {
+      if (item.source !== "mss-rss") return item;
+      const body = await collectors.mssDetail(item.url);
+      if (!body) return item;
+      return { ...item, detail: (item.detail ? `${body} / ${item.detail}` : body).slice(0, DETAIL_MAX) };
+    }),
+  );
+
+  // ── 6. 분석 (상위 모델 1회) + 검증
+  const analysis = await callAi(buildAnalysisRequest(candidates));
   addUsage(analysis.usage);
-  const { issues, dropped } = analysisToIssues(screening.candidates, analysis.data);
+  const { issues, dropped } = analysisToIssues(candidates, analysis.data);
 
   // Design §5: AI 응답이 전부 규칙에 어긋나면 실패로 처리한다.
   if (issues.length === 0) {

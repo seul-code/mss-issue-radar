@@ -56,8 +56,15 @@ export default function IssueCard({ issue }: { issue: Issue }) {
         ))}
       </div>
 
-      {/* 5. 핵심내용 (기사 사실) */}
-      <Field label="핵심내용">{issue.summary}</Field>
+      {/* 5. 핵심내용 — 원문 사실을 항목형 3~5줄로 */}
+      <Field label="핵심내용">
+        <ul className="list-disc space-y-1 pl-5">
+          {/* 예전 형식(한 문장)으로 저장된 결과도 깨지지 않게 목록으로 맞춘다 */}
+          {([] as string[]).concat(issue.summary).map((point) => (
+            <li key={point}>{point}</li>
+          ))}
+        </ul>
+      </Field>
 
       {/* 6. 중기부 연관성 (AI 분석) */}
       <Field label="중기부 연관성" badge>

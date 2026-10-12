@@ -2,7 +2,7 @@
 // CLAUDE.md 6장: AI 응답은 화면·다음 단계에 쓰기 전에 코드로 형식과 개수를 검증한다.
 import { NO_EVIDENCE_TEXT, type AnalysisResponse, type ScreeningResponse } from "@/lib/ai/prompts";
 import { CATEGORIES } from "@/lib/categories";
-import { isGovernment } from "@/lib/sources/preprocess";
+import { DETAIL_MAX, isGovernment } from "@/lib/sources/preprocess";
 import type { Category, Importance, Issue, RawItem } from "@/lib/types";
 
 /** PRD 5장: 하루 이슈는 최대 20개 */
@@ -13,6 +13,22 @@ export interface ScreeningResult {
   candidates: RawItem[];
   /** 자르기 전 관련 사건 수. 5건 미만이면 48시간으로 넓힌다 (PRD 5장) */
   relevantCount: number;
+}
+
+/**
+ * 같은 사건으로 묶인 기사들의 본문을 대표 기사 본문 뒤에 이어 붙인다 (Design §2 처리 3, 세부 요약용).
+ * 대표 본문이 짧아도(예: 연합뉴스 한 문장) 다른 언론사 본문으로 보충된다. 전체는 DETAIL_MAX 자까지.
+ */
+function mergeDetails(representative: RawItem, members: RawItem[]): string | undefined {
+  const parts = [representative, ...members.filter((m) => m !== representative)]
+    .map((m) => ({ publisher: m.publisher, text: m.detail ?? m.excerpt }))
+    .filter((p): p is { publisher: string; text: string } => !!p.text);
+  if (parts.length === 0) return undefined;
+  if (parts.length === 1) return parts[0].text.slice(0, DETAIL_MAX);
+  return parts
+    .map((p) => `[${p.publisher}] ${p.text}`)
+    .join(" / ")
+    .slice(0, DETAIL_MAX);
 }
 
 /**
@@ -32,13 +48,12 @@ export function pickCandidates(items: RawItem[], response: ScreeningResponse): S
     if (ids.length === 0) continue;
     ids.forEach((id) => used.add(id));
 
-    const representative = ids
-      .map((id) => items[id])
-      .reduce((best, item) => {
-        if (isGovernment(best) !== isGovernment(item)) return isGovernment(best) ? best : item;
-        return Date.parse(item.publishedAt) < Date.parse(best.publishedAt) ? item : best;
-      });
-    picked.push({ item: representative, direct: group.direct === true });
+    const members = ids.map((id) => items[id]);
+    const representative = members.reduce((best, item) => {
+      if (isGovernment(best) !== isGovernment(item)) return isGovernment(best) ? best : item;
+      return Date.parse(item.publishedAt) < Date.parse(best.publishedAt) ? item : best;
+    });
+    picked.push({ item: { ...representative, detail: mergeDetails(representative, members) }, direct: group.direct === true });
   }
 
   const ordered = picked.sort(
@@ -56,7 +71,9 @@ export function pickCandidates(items: RawItem[], response: ScreeningResponse): S
 /** PRD 5장 개수 제한 */
 const MAX_CATEGORIES = 2;
 const MAX_IDEAS = 2;
-const MAX_SUMMARY_SENTENCES = 2;
+/** 세부 요약은 항목형 최대 5줄, 한 줄이 너무 길면 자른다 (화면 가독성) */
+const MAX_SUMMARY_POINTS = 5;
+const MAX_POINT_LENGTH = 160;
 
 const VALID_CATEGORIES = new Set<string>(CATEGORIES);
 const VALID_IMPORTANCE = new Set<string>(["high", "medium", "low"]);
@@ -78,9 +95,14 @@ function clean(text: unknown): string | undefined {
   return trimmed || undefined;
 }
 
-/** 핵심내용은 2문장까지만 남긴다 (PRD 5장). "3.5%"처럼 숫자 속 마침표는 문장 끝으로 보지 않는다. */
-function limitSentences(text: string, max: number): string {
-  return text.split(/(?<=[.!?。]["'”’)]?)\s+/).slice(0, max).join(" ");
+/** 세부 요약 줄 정리: 앞의 "•", "-", "1." 같은 기호를 떼고, 같은 줄은 하나만, 최대 5줄 */
+function cleanPoints(points: unknown): string[] {
+  if (!Array.isArray(points)) return [];
+  const lines = points
+    .map((p) => clean(p)?.replace(/^([•·\-*]|\d+[.)])\s*/, ""))
+    .filter((p): p is string => !!p)
+    .map((p) => (p.length > MAX_POINT_LENGTH ? `${p.slice(0, MAX_POINT_LENGTH - 1)}…` : p));
+  return [...new Set(lines)].slice(0, MAX_SUMMARY_POINTS);
 }
 
 export interface AnalysisResult {
@@ -94,7 +116,7 @@ export interface AnalysisResult {
  * 최종 분석 응답을 화면용 이슈 카드로 바꾼다 (Design §2 처리 4).
  * - 제목·날짜·출처·원문 주소는 AI 답이 아니라 후보 자료에서 가져온다
  * - 없는 번호·중복 번호, 분야가 하나도 맞지 않는 답, 중요도·핵심내용·아이디어가 없는 답은 버린다
- * - 분야는 10개 안의 이름만 최대 2개, 아이디어 최대 2개, 확인사항 최대 1개, 핵심내용 최대 2문장
+ * - 분야는 10개 안의 이름만 최대 2개, 아이디어 최대 2개, 확인사항 최대 1개, 세부 요약 최대 5줄
  * - 연관성이 비어 있으면 "직접 연관된 정책은 확인 필요"로 채운다
  */
 export function analysisToIssues(candidates: RawItem[], response: AnalysisResponse): AnalysisResult {
@@ -111,12 +133,12 @@ export function analysisToIssues(candidates: RawItem[], response: AnalysisRespon
       MAX_CATEGORIES,
     ) as Category[];
     const importance = VALID_IMPORTANCE.has(answer.importance) ? (answer.importance as Importance) : undefined;
-    const summary = clean(answer.summary);
+    const summary = cleanPoints(answer.summary);
     const ideas = [...new Set((answer.ideas ?? []).map(clean).filter((idea): idea is string => !!idea))].slice(
       0,
       MAX_IDEAS,
     );
-    if (categories.length === 0 || !importance || !summary || ideas.length === 0) continue;
+    if (categories.length === 0 || !importance || summary.length === 0 || ideas.length === 0) continue;
 
     used.add(id);
     const source = candidates[id];
@@ -127,7 +149,7 @@ export function analysisToIssues(candidates: RawItem[], response: AnalysisRespon
       sourceName: source.publisher,
       importance,
       categories,
-      summary: limitSentences(summary, MAX_SUMMARY_SENTENCES),
+      summary,
       relevance: clean(answer.relevance) ?? NO_EVIDENCE_TEXT,
       ideas,
       followUp: clean(answer.followUp),

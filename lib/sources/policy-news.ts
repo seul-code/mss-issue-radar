@@ -1,8 +1,8 @@
 // Design Ref: §2 입력 ⓑ — 정책브리핑 정책뉴스 API 수집기 (공공데이터포털, 무료, 인증키 필요).
 // 전 부처 정책뉴스가 오므로 관련 기사 고르기는 전처리(키워드)와 AI 1차 선별이 한다.
 // 이 파일은 서버에서만 쓴다. 인증키는 .env의 DATA_GO_KR_API_KEY에서 읽고 오류 메시지·로그에 남기지 않는다.
-import { EXCERPT_MAX } from "@/lib/sources/preprocess";
-import { decodeEntities, kstToIso, readTag, toPlainText } from "@/lib/sources/xml";
+import { DETAIL_MAX, EXCERPT_MAX } from "@/lib/sources/preprocess";
+import { decodeEntities, kstToIso, readTag, stripContacts, toPlainText } from "@/lib/sources/xml";
 import type { RawItem } from "@/lib/types";
 
 export const POLICY_NEWS_URL = "https://apis.data.go.kr/1371000/policyNewsService2/policyNewsList2";
@@ -19,7 +19,7 @@ export function approveDateToIso(text: string): string | undefined {
 /**
  * API 응답(XML)을 기사 목록으로 바꾼다.
  * - 원문 주소·제목·날짜가 없는 기사는 버린다
- * - 본문은 부제목+본문 앞부분을 순수 글자로 바꿔 300자만 남긴다 (저장·표시하지 않고 AI 판단에만 씀, Design §6)
+ * - 본문은 부제목+본문을 순수 글자로 바꿔 선별용 300자, 세부 요약용 1,500자만 남긴다 (저장·표시하지 않고 AI 판단에만 씀, Design §6)
  */
 export function parsePolicyNews(xml: string): RawItem[] {
   const code = readTag(xml, "resultCode");
@@ -37,14 +37,18 @@ export function parsePolicyNews(xml: string): RawItem[] {
     const publishedAt = stamp ? approveDateToIso(stamp) : undefined;
     if (!title || !url || !/^https?:\/\//.test(url) || !publishedAt) continue;
 
-    const excerpt = toPlainText(`${readTag(block, "SubTitle1") ?? ""} ${readTag(block, "DataContents") ?? ""}`);
+    // 사진 설명·연락처는 AI에 보내지 않는다 (PRD 7장 개인정보).
+    const body = stripContacts(
+      toPlainText(`${readTag(block, "SubTitle1") ?? ""} ${readTag(block, "DataContents") ?? ""}`),
+    );
     items.push({
       source: "policy-news",
       title: toPlainText(title),
       url: decodeEntities(url),
       publisher: readTag(block, "MinisterCode") ?? "정책브리핑",
       publishedAt,
-      excerpt: excerpt ? excerpt.slice(0, EXCERPT_MAX) : undefined,
+      excerpt: body.slice(0, EXCERPT_MAX) || undefined,
+      detail: body.slice(0, DETAIL_MAX) || undefined,
     });
   }
   return items;

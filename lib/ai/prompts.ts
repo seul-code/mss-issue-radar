@@ -79,7 +79,8 @@ export interface AnalysisResponse {
     id: number;
     categories: Category[];
     importance: Importance;
-    summary: string;
+    /** 세부 요약 3~5줄 (원문 사실만) */
+    summary: string[];
     relevance: string;
     ideas: string[];
     followUp: string | null;
@@ -97,7 +98,7 @@ const ANALYSIS_SCHEMA = {
           id: { type: "integer" },
           categories: { type: "array", items: { type: "string", enum: [...CATEGORIES] } },
           importance: { type: "string", enum: ["high", "medium", "low"] },
-          summary: { type: "string" },
+          summary: { type: "array", items: { type: "string" } },
           relevance: { type: "string" },
           ideas: { type: "array", items: { type: "string" } },
           followUp: { type: ["string", "null"] },
@@ -121,13 +122,23 @@ function mockAnalysis(items: RawItem[]): AnalysisResponse {
         id,
         categories: matched.length > 0 ? matched.slice(0, 2) : ["중소기업"],
         importance: item.source === "news-rss" ? "medium" : "high",
-        summary: `[샘플 분석] ${item.title}`,
+        summary: [`[샘플 분석] ${item.title}`, "형식 확인용 가상 세부 내용 1", "형식 확인용 가상 세부 내용 2"],
         relevance: NO_EVIDENCE_TEXT,
         ideas: ["형식 확인용 가상 아이디어"],
         followUp: id % 2 === 0 ? "형식 확인용 가상 확인사항" : null,
       };
     }),
   };
+}
+
+/**
+ * 분석용 자료 한 덩어리: 머리 줄(번호·출처·제목) + 본문(같은 사건 기사 합친 것, 최대 1,500자).
+ * 세부 요약을 쓰려면 본문이 필요하다. 본문이 없으면 선별용 요약이라도 보낸다.
+ */
+function analysisBlock(item: RawItem, id: number): string {
+  const kind = item.source === "news-rss" ? "언론" : "정부";
+  const body = item.detail ?? item.excerpt ?? "(본문 없음 — 제목만 있음)";
+  return `[${id}] ${kind} | ${item.publisher} | ${item.publishedAt} | ${item.title}\n본문: ${body}`;
 }
 
 /** 최종 후보(최대 20건)를 한 번에 보내 이슈 카드 내용을 받는 요청 (상위 모델 1회) */
@@ -137,7 +148,8 @@ export function buildAnalysisRequest(items: RawItem[]): AiRequest<AnalysisRespon
     schema: { name: "issue_analysis", schema: ANALYSIS_SCHEMA },
     instructions: [
       "너는 대한민국 중소벤처기업부 공무원의 업무를 돕는 정책 분석 도우미다.",
-      "입력은 한 줄에 자료 하나다: 번호 | 정부/언론 | 발행처 | 발행 시각 | 제목 | 요약",
+      "입력은 자료마다 두 줄이다: [번호] 정부/언론 | 발행처 | 발행 시각 | 제목 / 본문: …",
+      "본문에는 같은 사건을 다룬 여러 언론사의 기사가 [발행처] 표시와 함께 이어 붙어 있을 수 있다.",
       "각 자료를 이슈 카드 내용으로 정리해 번호(id)와 함께 답한다. 중기부와 관련 없다고 판단한 자료는 빼도 된다.",
       "",
       "[분야 categories]",
@@ -149,7 +161,11 @@ export function buildAnalysisRequest(items: RawItem[]): AiRequest<AnalysisRespon
       "- medium: 관심 분야의 업계 동향 (예: 시장 통계, 업계 발표, 타 부처 정책)",
       "- low: 간접적으로만 관련된 경우 (예: 일반 경제 뉴스 중 일부만 관련)",
       "",
-      "[핵심내용 summary] 기사에 있는 사실만 2문장 이내로 쓴다. 해석이나 평가를 넣지 않는다.",
+      "[세부 요약 summary] 담당자가 원문을 열지 않아도 내용을 파악할 수 있게, 본문에 있는 사실을 3~5줄 항목으로 쓴다.",
+      "- 한 줄에 사실 하나. 30~80자 정도의 짧은 문장. 줄 앞에 기호(•, -, 번호)는 붙이지 않는다.",
+      "- 본문에 있으면 우선 담는다: 무엇을 하는지 · 지원 대상 · 금액·규모·비율 · 시행 시기·기간 · 신청 방법·기관 · 배경",
+      "- 제목을 그대로 되풀이하지 않는다. 제목에 없는 세부 내용을 담는다.",
+      "- 본문이 짧아 사실이 적으면 있는 만큼만 쓴다(최소 1줄). 해석이나 평가는 넣지 않는다.",
       "",
       "[중기부 연관성 relevance] 이 이슈가 중기부 업무와 어떻게 연결되는지 1~2문장으로 쓴다.",
       `- 연결할 근거가 자료에 없으면 정확히 "${NO_EVIDENCE_TEXT}"라고 쓴다.`,
@@ -164,7 +180,7 @@ export function buildAnalysisRequest(items: RawItem[]): AiRequest<AnalysisRespon
       "- 입력에 없는 번호는 쓰지 않고, 한 번호에는 한 번만 답한다.",
       "- 모든 문장은 한국어로, 간결한 보고서 문체로 쓴다.",
     ].join("\n"),
-    input: items.map(candidateLine).join("\n"),
+    input: items.map(analysisBlock).join("\n\n"),
     mock: () => mockAnalysis(items),
   };
 }

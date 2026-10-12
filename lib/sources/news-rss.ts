@@ -1,8 +1,8 @@
 // Design Ref: §2 입력 ⓒ — 언론사 RSS 수집기 (무료, 키 없음). AI 웹 검색을 대신한다.
 // AI 웹 검색은 정부 누리집이나 몇 년 전 기사만 찾아 최신 언론 기사가 0건이었다 (2026-10-12 실제 점검).
-// 화면에는 제목·원문 링크만 쓰고, 요약은 AI 판단에만 쓴다 (PRD 7장 저작권).
-import { EXCERPT_MAX } from "@/lib/sources/preprocess";
-import { readTag, toPlainText } from "@/lib/sources/xml";
+// 화면에는 제목·원문 링크와 AI가 쓴 사실 요약만 쓰고, RSS 본문은 AI 판단에만 쓴다 (PRD 7장 저작권).
+import { DETAIL_MAX, EXCERPT_MAX } from "@/lib/sources/preprocess";
+import { readTag, stripContacts, toPlainText } from "@/lib/sources/xml";
 import type { RawItem } from "@/lib/types";
 
 /**
@@ -56,15 +56,8 @@ export function parseNewsRss(xml: string, publisher: string): RawItem[] {
     const publishedAt = stamp ? rfc822ToIso(stamp) : undefined;
     if (!title || !url || !/^https?:\/\//.test(url) || !publishedAt) continue;
 
-    // 본문 앞부분에 붙는 "(서울=연합뉴스) 홍길동 기자 =" 같은 기자 이름은 AI에 보내지 않는다 (PRD 7장 개인정보).
-    const excerpt = toPlainText(readTag(block, "description") ?? "")
-      .replace(/^[[(][^\])]{0,30}[\])]\s*[^=]{0,40}?기자\s*=\s*/, "")
-      // 사진 설명의 "[사진=홍길동 기자 abc@…]"와 이메일 주소도 지운다.
-      .replace(/\[사진[^\]]{0,80}\]/g, "")
-      .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, EXCERPT_MAX);
+    // 기자 이름·사진 설명·연락처는 AI에 보내지 않는다 (PRD 7장 개인정보).
+    const body = stripContacts(toPlainText(readTag(block, "description") ?? ""));
 
     items.push({
       source: "news-rss",
@@ -72,7 +65,8 @@ export function parseNewsRss(xml: string, publisher: string): RawItem[] {
       url,
       publisher,
       publishedAt,
-      excerpt: excerpt || undefined,
+      excerpt: body.slice(0, EXCERPT_MAX) || undefined,
+      detail: body.slice(0, DETAIL_MAX) || undefined,
     });
   }
   return items;

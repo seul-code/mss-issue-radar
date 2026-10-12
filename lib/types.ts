@@ -33,8 +33,13 @@ export interface RawItem {
   publisher: string;
   /** 발행 시각. UTC 기준 ISO 문자열로 저장한다 (Design §2.1 시간 기준). */
   publishedAt: string;
-  /** 요약 또는 본문 앞부분 (최대 약 300자). 화면에 표시하거나 저장하지 않는다. */
+  /** 요약 또는 본문 앞부분 (최대 약 300자). 1차 선별에만 쓰고, 화면에 표시하거나 저장하지 않는다. */
   excerpt?: string;
+  /**
+   * 세부 요약용 본문 (최대 약 1,500자). 최종 후보의 분석에만 쓰고, 화면에 표시하거나 저장하지 않는다.
+   * 같은 사건으로 묶인 다른 기사의 본문도 여기에 합쳐진다.
+   */
+  detail?: string;
 }
 
 /** 화면 카드 한 장 = 이슈 하나. 필드 순서는 PRD의 카드 9개 항목 순서를 따른다. */
@@ -50,8 +55,8 @@ export interface Issue {
   importance: Importance;
   /** 4. 분야 1~2개, 관련 깊은 순 */
   categories: Category[];
-  /** 5. 핵심내용 — 기사에 있는 사실만, 2문장 이내 */
-  summary: string;
+  /** 5. 핵심내용 — 원문에 있는 사실만, 항목형 3~5줄 (무엇을·대상·규모·일정·방법 등) */
+  summary: string[];
   /** 6. 중기부 연관성 (AI 분석) */
   relevance: string;
   /** 7. 업무 활용 아이디어 (AI 분석, 최대 2개) */

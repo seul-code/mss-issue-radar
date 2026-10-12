@@ -6,6 +6,9 @@ import type { RawItem } from "@/lib/types";
 /** AI에 보낼 본문 앞부분 최대 길이 (Design §6: 약 300자만 보내고 저장·표시하지 않음) */
 export const EXCERPT_MAX = 300;
 
+/** 최종 후보의 세부 요약용으로 AI에 보낼 본문 최대 길이 (같은 사건의 여러 기사를 합친 길이 포함) */
+export const DETAIL_MAX = 1500;
+
 const ALL_KEYWORDS = Object.values(CATEGORY_KEYWORDS).flat();
 
 /** 정부 자료인지 (대표 출처를 고를 때 정부 자료를 우선한다 — PRD 5장) */
