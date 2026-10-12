@@ -45,3 +45,6 @@ next-env.d.ts
 
 # 삭제 대기 파일 (사용자가 직접 확인 후 삭제)
 /trash-can/
+
+# 외부 검토용으로 만든 압축 사본 (커밋하지 않음, 파일은 그대로 둔다)
+/review-package.zip

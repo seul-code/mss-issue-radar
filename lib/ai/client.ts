@@ -2,6 +2,7 @@
 // CLAUDE.md 2장: 개발 중 실제 호출 금지 → AI_MODE=live 일 때만 실제로 부르고, 그 외에는 가짜 응답을 돌려준다.
 // 이 파일은 서버에서만 쓴다. 화면 조각(components/)에서 import하지 않는다.
 import { timeoutSignal } from "@/lib/abort";
+import { readTextLimited, ResponseTooLargeError } from "@/lib/http";
 
 const OPENAI_URL = "https://api.openai.com/v1/responses";
 /**
@@ -66,10 +67,40 @@ export interface AiResult<T> {
   usage: { inputTokens: number; outputTokens: number };
 }
 
-/** Responses API 응답에서 필요한 부분만 정의한다. */
+/** OpenAI 응답 본문의 최대 크기 (응답은 이슈 20건 JSON, 실측 수십 KB) */
+const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+
+/**
+ * 실패 기록에 남겨도 되는 OpenAI 오류 값 (2026-10-12 공개 전 보안 점검).
+ * 응답의 설명 문장(message)은 기록하지 않는다 — 키가 틀렸을 때 가린 키 일부가 섞여 오기 때문이다.
+ * 목록에 없는 값은 "기타"로만 남긴다.
+ */
+const ALLOWED_ERROR_VALUES = new Set([
+  // error.code
+  "invalid_api_key", "insufficient_quota", "rate_limit_exceeded", "model_not_found", "context_length_exceeded",
+  "server_error", "unsupported_parameter", "unsupported_value", "invalid_value", "invalid_json_schema",
+  // error.type
+  "invalid_request_error", "authentication_error", "permission_error", "not_found_error", "rate_limit_error",
+  "api_error", "overloaded_error", "insufficient_quota_error",
+]);
+const ALLOWED_STATUS = new Set(["completed", "incomplete", "failed", "cancelled", "in_progress", "queued"]);
+const ALLOWED_INCOMPLETE_REASONS = new Set(["max_output_tokens", "content_filter"]);
+
+function allowed(value: unknown, list: Set<string>): string {
+  return typeof value === "string" && list.has(value) ? value : "기타";
+}
+
+/** 기록용 오류 요약: HTTP 상태 + 허용한 오류 코드·종류만 */
+function describeError(httpStatus: number, error: ResponsesApiBody["error"]): string {
+  const code = error?.code ? allowed(error.code, ALLOWED_ERROR_VALUES) : "없음";
+  const type = error?.type ? allowed(error.type, ALLOWED_ERROR_VALUES) : "없음";
+  return `OpenAI 오류 HTTP ${httpStatus} (code: ${code}, type: ${type})`;
+}
+
+/** Responses API 응답에서 필요한 부분만 정의한다. message 는 일부러 읽지 않는다. */
 interface ResponsesApiBody {
   status?: string;
-  error?: { message?: string } | null;
+  error?: { code?: unknown; type?: unknown } | null;
   incomplete_details?: { reason?: string } | null;
   output?: { type: string; content?: { type: string; text?: string }[] }[];
   usage?: { input_tokens?: number; output_tokens?: number };
@@ -116,13 +147,23 @@ export async function callAi<T>(req: AiRequest<T>, options: CallOptions = {}): P
     }),
   });
 
-  const body = (await res.json().catch(() => ({}))) as ResponsesApiBody;
+  // 응답 크기를 제한해 읽는다. 너무 크면 ResponseTooLargeError (이번 실행 실패로 기록, 직전 결과 유지).
+  let body: ResponsesApiBody;
+  try {
+    body = JSON.parse(await readTextLimited(res, MAX_RESPONSE_BYTES, "OpenAI")) as ResponsesApiBody;
+  } catch (error) {
+    if (error instanceof ResponseTooLargeError) throw error;
+    body = {};
+  }
   if (!res.ok) {
-    // 키 값은 오류 메시지에 담지 않는다 (CLAUDE.md 7장). OpenAI가 준 설명만 남긴다.
-    throw new Error(`OpenAI 오류 HTTP ${res.status}: ${body.error?.message ?? "응답 없음"}`);
+    // CLAUDE.md 7장: 응답의 설명 문장은 기록하지 않는다. HTTP 상태와 허용한 오류 코드·종류만 남긴다.
+    throw new Error(describeError(res.status, body.error));
   }
   if (body.status !== "completed") {
-    throw new Error(`OpenAI 응답이 끝나지 않음: ${body.status ?? "알 수 없음"} ${body.incomplete_details?.reason ?? ""}`.trim());
+    const status = body.status ? allowed(body.status, ALLOWED_STATUS) : "알 수 없음";
+    const reason = body.incomplete_details?.reason ? allowed(body.incomplete_details.reason, ALLOWED_INCOMPLETE_REASONS) : "";
+    const code = body.error ? ` ${describeError(res.status, body.error)}` : "";
+    throw new Error(`OpenAI 응답이 끝나지 않음: ${status} ${reason}${code}`.trim());
   }
 
   let data: T;

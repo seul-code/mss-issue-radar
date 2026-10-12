@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { kstDay } from "@/lib/format";
 import type { HistoryEntry } from "@/lib/types";
 
 const STATUS_LABEL: Record<HistoryEntry["status"], string> = {
@@ -18,15 +19,17 @@ function shortDate(date: string): string {
 }
 
 interface Props {
-  /** 최근 기록 (최신이 앞) */
-  recent: HistoryEntry[];
-  /** 오늘 한국 날짜 — 미래 날짜는 고를 수 없다 */
+  /** 최근 기록 (최신이 앞). 대시보드에서만 넘긴다. */
+  recent?: HistoryEntry[];
+  /** 화면을 만든 시각의 한국 날짜 — 미래 날짜는 고를 수 없다 (캐시된 화면이면 브라우저에서 오늘로 다시 맞춤) */
   today: string;
+  /** 기록 시작일 — 이전 날짜는 고를 수 없다 */
+  min: string;
   /** 지금 보고 있는 날짜 (과거 날짜 화면) */
   current?: string;
 }
 
-export default function HistoryPicker({ recent, today, current }: Props) {
+export default function HistoryPicker({ recent = [], today, min, current }: Props) {
   const router = useRouter();
   const [value, setValue] = useState(current ?? "");
 
@@ -36,7 +39,8 @@ export default function HistoryPicker({ recent, today, current }: Props) {
         className="flex flex-wrap items-center gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          if (value) router.push(`/d/${value}`);
+          // 서버도 범위 밖 날짜를 막지만(404), 고를 수 없는 날짜는 여기서 먼저 걸러 불필요한 요청을 줄인다.
+          if (value && value >= min && value <= kstDay(new Date())) router.push(`/d/${value}`);
         }}
       >
         <label htmlFor="history-date" className="text-sm font-semibold text-lavender-700">
@@ -45,7 +49,12 @@ export default function HistoryPicker({ recent, today, current }: Props) {
         <input
           id="history-date"
           type="date"
+          min={min}
           max={today}
+          // 화면이 캐시돼 있어도 날짜를 고를 때는 브라우저의 오늘 날짜를 최대값으로 쓴다.
+          onFocus={(event) => {
+            event.currentTarget.max = kstDay(new Date());
+          }}
           value={value}
           onChange={(event) => setValue(event.target.value)}
           className="rounded-full border border-line bg-ivory px-3 py-1 text-sm text-ink"

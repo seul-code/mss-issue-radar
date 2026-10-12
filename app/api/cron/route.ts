@@ -78,26 +78,39 @@ export async function GET(request: Request) {
   const now = new Date(startedAt);
   const budgetSignal = AbortSignal.timeout(PIPELINE_BUDGET_MS);
 
-  // 기존 상태를 읽지 못하면(형식 오류 포함) 아무것도 쓰지 않는다 — 성공 결과가 빈 값으로 덮이는 것 방지 (Design §2 처리 5).
+  // 시험 데이터 차단 (Design §9): 운영 저장소(Blob)에는 실제 AI 결과만 저장한다. 저장소를 읽거나 쓰기 전에 확인한다.
+  // 저장소 종류는 실행 환경(VERCEL_ENV)으로 정해지므로, 로컬·preview 에서는 AI_MODE 와 관계없이 운영 기록에 닿지 않는다.
+  let mode: ReturnType<typeof getAiMode> | "config-error";
+  try {
+    mode = getAiMode();
+  } catch {
+    mode = "config-error"; // 설정 오류는 아래 실행 단계에서 실패로 기록된다 (가짜 결과는 만들지 않음).
+  }
+  let storageKind: ReturnType<typeof getStorageKind>;
+  try {
+    storageKind = getStorageKind();
+  } catch (error) {
+    console.error("[cron] 저장소 설정 오류", error instanceof Error ? error.message : error);
+    return Response.json({ status: "error", error: "저장소 설정이 잘못돼 실행하지 않았습니다" }, { status: 500 });
+  }
+  if (storageKind === "blob" && mode === "mock") {
+    console.error("[cron] 가짜 AI 결과를 운영 저장소에 저장하려 해 실행하지 않았습니다");
+    return Response.json({ status: "error", error: "시험(가짜 AI) 결과는 운영 저장소에 저장할 수 없습니다" }, { status: 500 });
+  }
+
+  // 기존 상태를 읽지 못하면(깨진 JSON·형식 오류 포함) 아무것도 쓰지 않는다 — 원본을 덮어쓰지 않고 원인 확인용으로 남긴다 (Design §2 처리 5).
   let previous: RadarState;
   let version: string | null;
-  let dailyOnce: boolean;
   try {
     ({ state: previous, version } = await getVersionedState());
-    // 하루 1회 보장: 실제 AI 모드 또는 Blob 저장소(배포)에서는 오늘 실행권을 얻은 기록이 있으면 다시 실행하지 않는다.
-    // 개발용 메모리 저장소 + 가짜 AI 에서는 반복 시험할 수 있게 진행 중인 실행만 막는다.
-    let mode: ReturnType<typeof getAiMode> | "config-error";
-    try {
-      mode = getAiMode();
-    } catch {
-      mode = "config-error"; // 설정 오류는 아래 실행 단계에서 실패로 기록된다.
-    }
-    dailyOnce = mode !== "mock" || getStorageKind() === "blob";
   } catch (error) {
     console.error("[cron] 저장소 읽기 실패", error instanceof Error ? `${error.name}: ${error.message}` : error);
     return Response.json({ status: "error", error: "저장소를 읽지 못해 실행하지 않았습니다" }, { status: 500 });
   }
 
+  // 하루 1회 보장: 실제 AI 모드 또는 Blob 저장소(운영)에서는 오늘 실행권을 얻은 기록이 있으면 다시 실행하지 않는다.
+  // 개발용 메모리 저장소 + 가짜 AI 에서는 반복 시험할 수 있게 진행 중인 실행만 막는다.
+  const dailyOnce = mode !== "mock" || storageKind === "blob";
   const last = previous.lastRun;
   const leaseActive = last?.status === "running" && !!last.leaseUntil && Date.parse(last.leaseUntil) > startedAt;
   if (leaseActive) {
@@ -153,8 +166,9 @@ export async function GET(request: Request) {
 
   // 날짜별 기록 보관 (① 날짜별 파일 → ② 날짜 목록). 실패해도 최신 결과 저장(③)은 계속하고 이유만 남긴다.
   let historyError: string | undefined;
+  let changedDates = [kstDay(now)];
   try {
-    historyError = await recordHistory(previous, next);
+    ({ error: historyError, changedDates } = await recordHistory(previous, next));
   } catch (error) {
     historyError = `날짜별 기록 보관 실패: ${error instanceof Error ? error.message : String(error)}`.slice(0, MAX_ERROR_LENGTH);
   }
@@ -172,8 +186,9 @@ export async function GET(request: Request) {
     return Response.json({ ...body, saved: false }, { status: 500 });
   }
 
-  // 저장이 끝났으니 대시보드와 오늘 날짜 화면을 새로 만들도록 신호를 보낸다 (방문자는 저장된 결과만 읽는다).
+  // 저장이 끝났으니 대시보드와 내용이 바뀐 날짜 화면(오늘 + 복구한 날짜)을 새로 만들도록 신호를 보낸다.
+  // 날짜 화면은 이 신호가 올 때만 다시 만들어진다 (방문자는 저장된 결과만 읽는다).
   revalidatePath("/");
-  revalidatePath(`/d/${kstDay(now)}`);
+  for (const date of changedDates) revalidatePath(`/d/${date}`);
   return Response.json({ ...body, saved: true }, { status: body.status === "failed" ? 500 : 200 });
 }

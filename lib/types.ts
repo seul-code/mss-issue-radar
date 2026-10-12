@@ -82,7 +82,7 @@ export interface Issue {
   importanceReasonMissing?: boolean;
   /** 4. 분야 1~2개, 관련 깊은 순 */
   categories: Category[];
-  /** 5. 핵심내용 — 원문에 있는 사실만, 항목형 3~5줄 (무엇을·대상·규모·일정·방법 등) */
+  /** 5. 핵심내용 — 원문에 있는 사실만, 항목형 1~5줄 (근거가 충분하면 3~5줄. 무엇을·대상·규모·일정·방법 등) */
   summary: string[];
   /** 6. 중기부 연관성 (AI 분석) */
   relevance: string;

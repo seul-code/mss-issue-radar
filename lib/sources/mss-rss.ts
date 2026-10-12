@@ -1,12 +1,15 @@
 // Design Ref: §2 입력 ⓐ — 중기부 보도자료 RSS 수집기 (무료, 키 없음).
 // RSS 구조가 단순해 별도 라이브러리 없이 정규식으로 읽는다 (Design §3 "쓰지 않는 것").
 import { timeoutSignal } from "@/lib/abort";
-import { kstToIso, readTag } from "@/lib/sources/xml";
+import { readTextLimited } from "@/lib/http";
+import { assertFeedStructure, kstToIso, readTag } from "@/lib/sources/xml";
 import type { RawItem } from "@/lib/types";
 
 export const MSS_RSS_URL = "https://www.mss.go.kr/rss/smba/board/86.do";
 const PUBLISHER = "중소벤처기업부";
 const TIMEOUT_MS = 15_000;
+/** 받을 수 있는 최대 크기 (2026-10-12 실측 약 7KB) — 넘으면 이 출처만 수집 오류 */
+const MAX_BYTES = 1024 * 1024;
 
 /**
  * 중기부 RSS 날짜(한국 시각 "20261006091605")를 UTC ISO 문자열로 바꾼다.
@@ -19,10 +22,14 @@ export function kstStampToIso(stamp: string): string | undefined {
   return kstToIso(y, mo, d, h, mi, s);
 }
 
-/** RSS 문서(XML 문자열)를 기사 목록으로 바꾼다. 원문 주소나 날짜가 없는 항목은 버린다. */
+/**
+ * RSS 문서(XML 문자열)를 기사 목록으로 바꾼다. 원문 주소나 날짜가 없는 항목은 버린다.
+ * RSS 구조가 아니거나 항목을 하나도 읽지 못하면 오류 (정상 RSS에 항목 0건은 빈 목록).
+ */
 export function parseMssRss(xml: string): RawItem[] {
   const items: RawItem[] = [];
-  for (const [, block] of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
+  const blocks = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)];
+  for (const [, block] of blocks) {
     const title = readTag(block, "title");
     const url = readTag(block, "link")?.replace(/&amp;/g, "&");
     const stamp = readTag(block, "pubDate");
@@ -33,6 +40,13 @@ export function parseMssRss(xml: string): RawItem[] {
 
     items.push({ source: "mss-rss", title, url, publisher: PUBLISHER, publishedAt });
   }
+  assertFeedStructure(xml, {
+    label: "중기부 RSS",
+    open: /<channel[\s>]/,
+    close: /<\/channel>/,
+    blocks: blocks.length,
+    parsed: items.length,
+  });
   return items;
 }
 
@@ -43,5 +57,5 @@ export async function fetchMssRss(signal?: AbortSignal): Promise<RawItem[]> {
     signal: timeoutSignal(TIMEOUT_MS, signal),
   });
   if (!res.ok) throw new Error(`중기부 RSS 응답 오류: HTTP ${res.status}`);
-  return parseMssRss(await res.text());
+  return parseMssRss(await readTextLimited(res, MAX_BYTES, "중기부 RSS"));
 }

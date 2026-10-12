@@ -14,10 +14,10 @@ import {
   readMemoryJson,
   writeMemoryJsonIfVersion,
 } from "@/lib/storage/memory";
-import { parseDailyRecord, parseHistoryIndex, parseRadarState } from "@/lib/storage/parse";
+import { parseDailyRecord, parseHistoryIndex, parseRadarState, StateFormatError } from "@/lib/storage/parse";
 import type { DailyRecord, HistoryIndex, RadarState } from "@/lib/types";
 
-export { StateFormatError } from "@/lib/storage/parse";
+export { isDayString, StateFormatError } from "@/lib/storage/parse";
 
 export type StorageKind = "blob" | "memory";
 
@@ -36,19 +36,27 @@ export class StateConflictError extends Error {
 }
 
 /**
- * Blob 토큰이 있으면 Blob, 없으면 개발용 메모리.
- * Design §4: 배포(VERCEL_ENV=production)에서는 메모리로 넘어가지 않는다 — 결과가 사라지는 것을 막는다.
+ * 운영 배포(VERCEL_ENV=production)에서만 Blob, 그 밖(로컬·preview)은 Blob 토큰이 있어도 개발용 메모리.
+ * Design §4·§9: 시험 실행(가짜 AI 포함)이 운영 기록을 바꾸거나 운영 저장소의 무료 한도를 쓰지 않게 한다.
+ * AI_MODE 가 아니라 실행 환경으로 정한다 — 로컬에서 실제 AI로 시험해도 운영 기록에는 닿지 않는다.
+ * 운영에서는 메모리로 넘어가지 않는다 — 결과가 사라지는 것을 막는다.
  */
 export function getStorageKind(): StorageKind {
-  if (process.env.BLOB_READ_WRITE_TOKEN) return "blob";
-  if (process.env.VERCEL_ENV === "production") {
+  if (process.env.VERCEL_ENV !== "production") return "memory";
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
     throw new StorageConfigError("배포 환경인데 Blob 저장소가 연결되지 않았습니다 (BLOB_READ_WRITE_TOKEN 없음)");
   }
-  return "memory";
+  return "blob";
 }
 
-function readJson(pathname: string, fresh: boolean) {
-  return getStorageKind() === "memory" ? readMemoryJson(pathname) : readBlobJson(pathname, fresh);
+/** 파일을 읽는다. JSON으로 읽을 수 없는 깨진 파일은 형식 오류로 바꾼다 — 화면은 안내를, 자동 실행은 덮어쓰지 않고 멈춘다. */
+async function readJson(pathname: string, fresh: boolean) {
+  try {
+    return getStorageKind() === "memory" ? await readMemoryJson(pathname) : await readBlobJson(pathname, fresh);
+  } catch (error) {
+    if (error instanceof SyntaxError) throw new StateFormatError(`${pathname} 파일을 JSON으로 읽을 수 없습니다`);
+    throw error;
+  }
 }
 
 async function writeJsonIfVersion(pathname: string, json: string, version: string | null): Promise<string> {

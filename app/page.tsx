@@ -16,7 +16,7 @@ import {
 } from "@/lib/ai/__fixtures__/sample-states";
 import liveSample from "@/lib/ai/__fixtures__/live-sample.json";
 import { kstDay } from "@/lib/format";
-import { loadRecentHistory } from "@/lib/history";
+import { HISTORY_START_DATE, loadRecentHistory } from "@/lib/history";
 import { sortIssues } from "@/lib/issues";
 import { getState, StateFormatError } from "@/lib/storage";
 import { parseRadarState } from "@/lib/storage/parse";
@@ -81,7 +81,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
       <div className="mt-6 space-y-4">
         <StatusBanner state={state} now={now} unreadable={unreadable} />
         <SummaryBar result={state.lastSuccess} />
-        <HistoryPicker recent={recent} today={today} />
+        <HistoryPicker recent={recent} today={today} min={HISTORY_START_DATE} />
       </div>
       {/* 저장된 결과가 아예 없으면 상태 안내만 보여주고 필터·카드 영역은 숨긴다. */}
       {state.lastSuccess && (

@@ -69,6 +69,8 @@ export interface PipelineResult {
     windowHours: 24 | 48;
     /** 시간이 모자라 48시간 확장을 건너뛰었는지 */
     expansionSkipped: boolean;
+    /** 48시간 확장 호출이 실패해 24시간 결과로 진행한 경우 그 이유 */
+    expansionError?: string;
     collected: { mss: number; policyNews: number; news: number };
     /** 실패한 출처와 이유 (키 값은 포함되지 않음) */
     sourceErrors: string[];
@@ -88,6 +90,24 @@ export class GovernmentSourcesError extends Error {
   name = "GovernmentSourcesError";
 }
 
+/** 운영에 꼭 필요한 설정이 빠진 경우 — 수집·AI 호출 전에 멈춘다 */
+export class PipelineConfigError extends Error {
+  name = "PipelineConfigError";
+}
+
+/**
+ * 운영(VERCEL_ENV=production)에서 수집 전에 확인하는 필수 키 (Design §4 "필수 키가 없으면 실패").
+ * AI 키·모델명은 getAiMode, Blob 토큰·CRON_SECRET 은 저장소·자동 실행 주소가 따로 확인한다.
+ * 로컬·preview 에서는 확인하지 않는다 — 키 없이 가짜 수집기로 시험할 수 있게.
+ */
+const REQUIRED_IN_PRODUCTION = ["DATA_GO_KR_API_KEY"] as const;
+
+function assertProductionConfig(): void {
+  if (process.env.VERCEL_ENV !== "production") return;
+  const missing = REQUIRED_IN_PRODUCTION.filter((name) => !process.env[name]);
+  if (missing.length > 0) throw new PipelineConfigError(`설정 오류: ${missing.join(", ")} 없음`);
+}
+
 function reason(result: PromiseSettledResult<unknown>): string {
   return result.status === "rejected"
     ? result.reason instanceof Error
@@ -100,8 +120,9 @@ export async function runDailyPipeline(
   now: Date = new Date(),
   { deadlineAt, signal, collectors = DEFAULT_COLLECTORS }: PipelineOptions = {},
 ): Promise<PipelineResult> {
-  // 설정이 잘못됐으면(배포인데 live 아님 등) 수집 전에 바로 멈춘다.
+  // 설정이 잘못됐으면(배포인데 live 아님, 필수 키 없음 등) 수집 전에 바로 멈춘다 — 실패로 기록되고 직전 결과는 유지된다.
   const mode = getAiMode();
+  assertProductionConfig();
   /** 마감까지 남은 시간(ms). 시간 예산이 없으면 무한대 */
   const remaining = () => (deadlineAt === undefined ? Infinity : deadlineAt - Date.now());
   const usage = { inputTokens: 0, outputTokens: 0 };
@@ -151,11 +172,19 @@ export async function runDailyPipeline(
 
   // ── 3. 관련 이슈가 5건 미만이면 48시간으로 넓혀 한 번 더 (저가 모델 +1회).
   //       남은 시간이 모자라면 확장을 건너뛰고 24시간 결과로 진행한다.
+  //       확장 호출이 실패해도 24시간 후보가 1건 이상이면 그것으로 진행한다 (다시 시도하지 않음 → 호출 수 그대로).
+  //       24시간 후보가 0건이면 실패로 둔다 — 48시간을 확인하지 못했으므로 "0건"으로 기록하면 사실과 다르다.
   let expansionSkipped = false;
+  let expansionError: string | undefined;
   if (screening.relevantCount < MIN_ISSUES_BEFORE_EXPANSION) {
     if (remaining() - MIN_ANALYSIS_MS >= MIN_EXPANSION_MS) {
-      windowHours = 48;
-      screening = await screen(48);
+      try {
+        screening = await screen(48);
+        windowHours = 48;
+      } catch (error) {
+        if (signal?.aborted || screening.candidates.length === 0) throw error;
+        expansionError = `48시간 확장 실패 — 24시간 결과로 진행: ${error instanceof Error ? error.message : String(error)}`;
+      }
     } else {
       expansionSkipped = true;
     }
@@ -170,6 +199,7 @@ export async function runDailyPipeline(
     mode,
     windowHours,
     expansionSkipped,
+    ...(expansionError ? { expansionError } : {}),
     collected: {
       mss: mssResult.status === "fulfilled" ? mssResult.value.length : 0,
       policyNews: policyResult.status === "fulfilled" ? policyResult.value.length : 0,

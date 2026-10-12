@@ -2,8 +2,9 @@
 // AI 웹 검색은 정부 누리집이나 몇 년 전 기사만 찾아 최신 언론 기사가 0건이었다 (2026-10-12 실제 점검).
 // 화면에는 제목·원문 링크와 AI가 쓴 사실 요약만 쓰고, RSS 본문은 AI 판단에만 쓴다 (PRD 7장 저작권).
 import { timeoutSignal } from "@/lib/abort";
+import { readTextLimited } from "@/lib/http";
 import { DETAIL_MAX, EXCERPT_MAX } from "@/lib/sources/preprocess";
-import { decodeEntities, readTag, stripContacts, toPlainText } from "@/lib/sources/xml";
+import { assertFeedStructure, decodeEntities, readTag, stripContacts, toPlainText } from "@/lib/sources/xml";
 import type { RawItem } from "@/lib/types";
 
 /**
@@ -37,6 +38,8 @@ export const NEWS_FEEDS = [
 ] as const;
 
 const TIMEOUT_MS = 15_000;
+/** 언론사 한 곳에서 받을 수 있는 최대 크기 (2026-10-12 실측 최대 약 320KB의 6배 이상) */
+const MAX_BYTES = 2 * 1024 * 1024;
 
 /**
  * RSS 날짜를 UTC ISO 문자열로 바꾼다. 언론사마다 형식이 조금씩 달라 아래를 모두 읽는다.
@@ -47,10 +50,14 @@ export function rfc822ToIso(text: string): string | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
-/** 언론사 RSS 문서를 기사 목록으로 바꾼다. 제목·원문 주소·날짜가 없는 항목은 버린다. */
+/**
+ * 언론사 RSS 문서를 기사 목록으로 바꾼다. 제목·원문 주소·날짜가 없는 항목은 버린다.
+ * RSS 구조가 아니거나 항목을 하나도 읽지 못하면 오류 — 그 언론사만 출처 오류로 기록된다.
+ */
 export function parseNewsRss(xml: string, publisher: string): RawItem[] {
   const items: RawItem[] = [];
-  for (const [, block] of xml.matchAll(/<item[\s>]([\s\S]*?)<\/item>/g)) {
+  const blocks = [...xml.matchAll(/<item[\s>]([\s\S]*?)<\/item>/g)];
+  for (const [, block] of blocks) {
     const title = readTag(block, "title");
     const url = readTag(block, "link")?.replace(/&amp;/g, "&");
     const stamp = readTag(block, "pubDate") ?? readTag(block, "dc:date");
@@ -71,6 +78,13 @@ export function parseNewsRss(xml: string, publisher: string): RawItem[] {
       detail: body.slice(0, DETAIL_MAX) || undefined,
     });
   }
+  assertFeedStructure(xml, {
+    label: `${publisher} RSS`,
+    open: /<channel[\s>]/,
+    close: /<\/channel>/,
+    blocks: blocks.length,
+    parsed: items.length,
+  });
   return items;
 }
 
@@ -83,7 +97,8 @@ export async function fetchNewsRss(signal?: AbortSignal): Promise<{ items: RawIt
     NEWS_FEEDS.map(async (feed) => {
       const res = await fetch(feed.url, { cache: "no-store", signal: timeoutSignal(TIMEOUT_MS, signal) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return parseNewsRss(await res.text(), feed.publisher);
+      // 크기 초과는 이 언론사만 실패로 기록되고 나머지 언론사는 계속 쓴다.
+      return parseNewsRss(await readTextLimited(res, MAX_BYTES, feed.publisher), feed.publisher);
     }),
   );
 

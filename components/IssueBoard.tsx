@@ -15,8 +15,17 @@ const FILTERS: readonly Filter[] = ["전체", ...CATEGORIES];
 const STAGGER_MS = 30;
 const MAX_DELAY_MS = 400;
 
-/** issues는 이미 정렬된 상태로 받는다. */
-export default function IssueBoard({ issues }: { issues: Issue[] }) {
+/**
+ * issues는 이미 정렬된 상태로 받는다.
+ * emptyText: 고른 분야에 이슈가 없을 때의 안내 (과거 날짜 화면에서는 '오늘' 대신 그 날 기준 문구를 넘긴다).
+ */
+export default function IssueBoard({
+  issues,
+  emptyText = "오늘은 새 이슈가 없습니다",
+}: {
+  issues: Issue[];
+  emptyText?: string;
+}) {
   const [selected, setSelected] = useState<Filter>("전체");
 
   const countOf = (filter: Filter) =>
@@ -69,7 +78,7 @@ export default function IssueBoard({ issues }: { issues: Issue[] }) {
         ) : (
           // 고른 분야에 이슈가 없을 때는 안내만 보여준다 (분야별 이전 결과는 저장하지 않음).
           <p className="rounded-3xl border-2 border-dashed border-line bg-cream p-8 text-center text-sm text-ink-soft">
-            🫧 오늘은 새 이슈가 없습니다
+            🫧 {emptyText}
           </p>
         )}
       </div>

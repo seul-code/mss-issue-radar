@@ -22,7 +22,10 @@ const jua = Jua({
 
 export const metadata: Metadata = {
   title: "중기부 이슈레이더",
-  description: "중소벤처기업부 관련 뉴스·정책 이슈를 매일 아침 한 화면에 정리합니다.",
+  description: "중소벤처기업부 관련 뉴스·정책 이슈를 매일 아침 한 화면에 정리하는 개인 학습용 서비스입니다 (공식 서비스 아님).",
+  // 검색엔진 색인 방지: 공식 기관 사이트로 오해되거나 AI 문장이 공식 입장처럼 퍼지는 것을 막는다.
+  // (robots.txt 로 막으면 검색엔진이 이 표시를 읽지 못하므로 쓰지 않는다. 같은 내용을 X-Robots-Tag 머리글로도 보낸다 — next.config.ts)
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -34,6 +37,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <footer className="mt-10 border-t border-line px-4 py-6 text-center text-xs leading-6 text-ink-soft">
           <p>✨ AI가 생성한 분석으로, 사실 확인이 필요합니다.</p>
           <p>원문은 언론사 사정에 따라 열리지 않을 수 있습니다.</p>
+          <p className="font-semibold">개인 학습용 서비스이며 중소벤처기업부 공식 서비스가 아닙니다.</p>
         </footer>
       </body>
     </html>

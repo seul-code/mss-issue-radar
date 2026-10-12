@@ -9,11 +9,23 @@ import { kstDay } from "@/lib/format";
 import {
   createDailyRecord,
   getHistoryIndex,
+  isDayString,
   saveHistoryIndexIfVersion,
 } from "@/lib/storage";
 import type { HistoryEntry, HistoryIndex, RadarState, SuccessResult } from "@/lib/types";
 
 const MAX_ERROR_LENGTH = 300;
+
+/**
+ * 서비스 기록 시작일 (첫 실제 실행일). 이보다 이전 날짜는 저장소를 읽지 않고 404.
+ * 날짜 화면의 주소 범위를 묶어, 아무 날짜나 열어 Blob 무료 읽기 한도를 쓰는 일을 막는다 (Design §4-1).
+ */
+export const HISTORY_START_DATE = "2026-10-12";
+
+/** 날짜 화면에서 열 수 있는 날짜인지: 실제로 있는 날짜 + 기록 시작일 ~ 오늘(한국 날짜) */
+export function isViewableDay(value: string, today: string): boolean {
+  return isDayString(value) && value >= HISTORY_START_DATE && value <= today;
+}
 
 /** 화면의 "최근 기록" 칩 개수 */
 const RECENT_LIMIT = 10;
@@ -49,16 +61,24 @@ function saveDaily(date: string, result: SuccessResult): Promise<"created" | "ex
   return createDailyRecord({ date, generatedAt: result.generatedAt, window: result.window, issues: result.issues });
 }
 
+export interface HistoryOutcome {
+  /** 일부 저장에 실패했으면 그 이유 (실행 기록 historyError 로 남긴다) */
+  error?: string;
+  /** 날짜 화면 내용이 바뀌었을 수 있는 날짜 — 자동 실행이 그 화면들을 다시 만들게 한다 (오늘 + 복구한 날짜) */
+  changedDates: string[];
+}
+
 /**
- * 이번 실행 결과를 날짜별 기록에 반영한다. 문제가 없으면 undefined, 일부 실패하면 그 이유를 돌려준다.
+ * 이번 실행 결과를 날짜별 기록에 반영한다.
  * @param previous 이번 실행 전의 상태 (자동 복구용)
  * @param next     이번 실행 후 저장할 상태 (lastRun.status 가 success·empty·failed 중 하나)
  */
-export async function recordHistory(previous: RadarState, next: RadarState): Promise<string | undefined> {
+export async function recordHistory(previous: RadarState, next: RadarState): Promise<HistoryOutcome> {
   const run = next.lastRun;
-  if (!run || run.status === "running") return undefined;
+  if (!run || run.status === "running") return { changedDates: [] };
 
   const errors: string[] = [];
+  const changedDates = new Set<string>();
   const runDate = kstDay(new Date(run.at));
   /** 연도별로 날짜 목록에 넣을 줄. keepExisting = 그 날짜에 이미 성공 줄이 있으면 고치지 않음 */
   const pending = new Map<number, { entry: HistoryEntry; keepExisting: boolean }[]>();
@@ -96,13 +116,19 @@ export async function recordHistory(previous: RadarState, next: RadarState): Pro
       if (year === healYear && prevSuccess && prevDate) {
         const recorded = index.entries.find((e) => e.date === prevDate && e.status === "success");
         if (!recorded) {
-          await saveDaily(prevDate, prevSuccess);
-          updated = upsertEntry(updated, {
-            date: prevDate,
-            status: "success",
-            issueCount: prevSuccess.issues.length,
-            at: prevSuccess.generatedAt,
-          });
+          // 복구 실패는 그 날짜에만 영향을 준다 — 오늘 줄은 아래에서 그대로 저장한다. 다음 성공 실행이 다시 시도한다.
+          try {
+            await saveDaily(prevDate, prevSuccess);
+            updated = upsertEntry(updated, {
+              date: prevDate,
+              status: "success",
+              issueCount: prevSuccess.issues.length,
+              at: prevSuccess.generatedAt,
+            });
+            changedDates.add(prevDate);
+          } catch (error) {
+            errors.push(`이전 날짜 복구 실패(${prevDate}): ${message(error)}`);
+          }
         }
       }
       for (const { entry, keepExisting } of entries) {
@@ -116,5 +142,10 @@ export async function recordHistory(previous: RadarState, next: RadarState): Pro
     }
   }
 
-  return errors.length > 0 ? errors.join(" / ").slice(0, MAX_ERROR_LENGTH) : undefined;
+  // 오늘 날짜 화면은 결과와 관계없이 다시 만든다 (성공·0건·실패 안내가 바뀜).
+  changedDates.add(runDate);
+  return {
+    error: errors.length > 0 ? errors.join(" / ").slice(0, MAX_ERROR_LENGTH) : undefined,
+    changedDates: [...changedDates],
+  };
 }

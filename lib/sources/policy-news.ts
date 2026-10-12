@@ -2,12 +2,15 @@
 // 전 부처 정책뉴스가 오므로 관련 기사 고르기는 전처리(키워드)와 AI 1차 선별이 한다.
 // 이 파일은 서버에서만 쓴다. 인증키는 .env의 DATA_GO_KR_API_KEY에서 읽고 오류 메시지·로그에 남기지 않는다.
 import { timeoutSignal } from "@/lib/abort";
+import { readTextLimited } from "@/lib/http";
 import { DETAIL_MAX, EXCERPT_MAX } from "@/lib/sources/preprocess";
-import { decodeEntities, kstToIso, readTag, stripContacts, toPlainText } from "@/lib/sources/xml";
+import { assertFeedStructure, decodeEntities, kstToIso, readTag, stripContacts, toPlainText } from "@/lib/sources/xml";
 import type { RawItem } from "@/lib/types";
 
 export const POLICY_NEWS_URL = "https://apis.data.go.kr/1371000/policyNewsService2/policyNewsList2";
 const TIMEOUT_MS = 20_000;
+/** 받을 수 있는 최대 크기 — 기사 본문(HTML)이 통째로 오므로 넉넉히 둔다. 넘으면 이 출처만 수집 오류 */
+const MAX_BYTES = 5 * 1024 * 1024;
 
 /** 승인 시각("10/08/2026 17:10:00", 한국 시각)을 UTC ISO 문자열로 바꾼다 (Design §2.1). */
 export function approveDateToIso(text: string): string | undefined {
@@ -31,7 +34,8 @@ export function parsePolicyNews(xml: string): RawItem[] {
   }
 
   const items: RawItem[] = [];
-  for (const [, block] of xml.matchAll(/<NewsItem>([\s\S]*?)<\/NewsItem>/g)) {
+  const blocks = [...xml.matchAll(/<NewsItem>([\s\S]*?)<\/NewsItem>/g)];
+  for (const [, block] of blocks) {
     const title = readTag(block, "Title");
     const url = readTag(block, "OriginalUrl");
     const stamp = readTag(block, "ApproveDate");
@@ -52,6 +56,14 @@ export function parsePolicyNews(xml: string): RawItem[] {
       detail: body.slice(0, DETAIL_MAX) || undefined,
     });
   }
+  // 정상 응답(resultCode 0)이어도 본문 구조가 없거나 잘렸으면 오류. 기사 0건인 정상 응답은 빈 목록.
+  assertFeedStructure(xml, {
+    label: "정책뉴스 API",
+    open: /<body>/,
+    close: /<\/body>/,
+    blocks: blocks.length,
+    parsed: items.length,
+  });
   return items;
 }
 
@@ -83,7 +95,7 @@ export async function fetchPolicyNews(now: Date, signal?: AbortSignal): Promise<
     // 네트워크 오류 메시지에 요청 주소(키 포함)가 섞이지 않도록 이유만 남긴다.
     throw new Error(`정책뉴스 API 연결 실패: ${error instanceof Error ? error.name : "알 수 없음"}`);
   }
-  const text = await res.text();
+  const text = await readTextLimited(res, MAX_BYTES, "정책뉴스 API");
   if (!res.ok && !text.includes("<returnAuthMsg>")) throw new Error(`정책뉴스 API 응답 오류: HTTP ${res.status}`);
   return parsePolicyNews(text);
 }

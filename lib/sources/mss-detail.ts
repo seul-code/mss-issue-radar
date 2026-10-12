@@ -2,10 +2,13 @@
 // 중기부 RSS에는 본문이 없어 제목만으로는 세부 요약을 쓸 수 없다. 최종 후보로 뽑힌 중기부 자료만 원문 페이지를 읽는다.
 // 안전장치: 중기부 보도자료 주소만 허용 · 15초 제한 · 글자만 꺼냄 · 연락처 제거 · 1,500자만 AI에 보냄 · 저장·표시 안 함.
 import { timeoutSignal } from "@/lib/abort";
+import { readTextLimited } from "@/lib/http";
 import { DETAIL_MAX } from "@/lib/sources/preprocess";
 import { decodeEntities, stripContacts, toPlainText } from "@/lib/sources/xml";
 
 const TIMEOUT_MS = 15_000;
+/** 보도자료 페이지 최대 크기 (2026-10-12 실측 약 135KB) */
+const MAX_BYTES = 2 * 1024 * 1024;
 
 /** 중기부 보도자료 게시판 주소인지 (다른 주소는 절대 열지 않는다) */
 export function isMssPressUrl(url: string): boolean {
@@ -42,7 +45,8 @@ export async function fetchMssDetail(url: string, signal?: AbortSignal): Promise
   try {
     const res = await fetch(url, { cache: "no-store", signal: timeoutSignal(TIMEOUT_MS, signal), redirect: "error" });
     if (!res.ok) return undefined;
-    return extractMssBody(await res.text());
+    // 크기를 넘으면 오류 → 아래에서 undefined (그 후보만 제목·기존 본문으로 진행)
+    return extractMssBody(await readTextLimited(res, MAX_BYTES, "중기부 보도자료 본문"));
   } catch {
     return undefined;
   }

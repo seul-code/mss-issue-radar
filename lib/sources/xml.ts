@@ -8,6 +8,20 @@ export function readTag(block: string, tag: string): string | undefined {
 }
 
 /**
+ * 응답이 정상 200이어도 내용이 고장 났는지 확인한다 (Design §5 수집 오류).
+ * - 필수 구조(시작·끝 태그)가 없으면 오류: HTML 오류 화면, 중간에 잘린 문서, 형식이 바뀐 문서
+ * - 항목은 있는데 하나도 읽지 못했으면 오류: 항목 형식이 바뀐 경우
+ * 정상 구조에 항목이 0건인 것은 오류가 아니다 (그날 새 글이 없는 경우).
+ */
+export function assertFeedStructure(
+  xml: string,
+  { label, open, close, blocks, parsed }: { label: string; open: RegExp; close: RegExp; blocks: number; parsed: number },
+): void {
+  if (!open.test(xml) || !close.test(xml)) throw new Error(`${label} 형식 오류: 필수 구조가 없습니다`);
+  if (blocks > 0 && parsed === 0) throw new Error(`${label} 형식 오류: 항목 ${blocks}건을 하나도 읽지 못했습니다`);
+}
+
+/**
  * 숫자 문자 표기(&#…;)를 글자로 바꾼다. 글자로 쓸 수 없는 값은 빈 문자열로 버린다 — 오류를 던지면 출처 전체가 실패한다.
  * 버리는 값: 범위 밖(0x10FFFF 초과), 짝 없는 대리 문자(D800~DFFF), 탭·줄바꿈을 뺀 제어 문자, 글자가 아닌 FFFE·FFFF
  */
