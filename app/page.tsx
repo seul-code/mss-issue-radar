@@ -1,6 +1,8 @@
 // Design Ref: §1, §2 처리 6 — 대시보드. 저장소에 있는 마지막 결과를 읽기만 한다 (방문 시 AI 호출 없음).
 // 화면은 미리 만들어 두고, 자동 실행이 저장을 마치면 revalidatePath("/")로 새로 만든다.
+import HistoryPicker from "@/components/HistoryPicker";
 import IssueBoard from "@/components/IssueBoard";
+import PageHeader from "@/components/PageHeader";
 import StatusBanner from "@/components/StatusBanner";
 import SummaryBar from "@/components/SummaryBar";
 import {
@@ -13,26 +15,18 @@ import {
   staleState,
 } from "@/lib/ai/__fixtures__/sample-states";
 import liveSample from "@/lib/ai/__fixtures__/live-sample.json";
+import { kstDay } from "@/lib/format";
+import { loadRecentHistory } from "@/lib/history";
+import { sortIssues } from "@/lib/issues";
 import { getState, StateFormatError } from "@/lib/storage";
 import { parseRadarState } from "@/lib/storage/parse";
-import type { Importance, Issue, RadarState } from "@/lib/types";
+import type { RadarState } from "@/lib/types";
 
 /**
  * 자동 실행 후 갱신 신호를 놓쳐도 최대 1시간 안에는 새 결과를 읽도록 하는 안전장치.
  * 갱신은 방문이 있을 때만 일어나고 저장소 읽기 1회뿐이라 무료 한도에 영향이 거의 없다.
  */
 export const revalidate = 3600;
-
-const IMPORTANCE_RANK: Record<Importance, number> = { high: 0, medium: 1, low: 2 };
-
-/** PRD 5장: 중요도 높음 → 보통 → 낮음, 같으면 최신순(대표 출처 날짜 기준). 원본 배열은 바꾸지 않는다. */
-function sortIssues(issues: Issue[]): Issue[] {
-  return [...issues].sort(
-    (a, b) =>
-      IMPORTANCE_RANK[a.importance] - IMPORTANCE_RANK[b.importance] ||
-      Date.parse(b.publishedAt) - Date.parse(a.publishedAt),
-  );
-}
 
 /** 데모 화면의 "지금" — 샘플 날짜가 고정돼 있어, 실행 직후 시각으로 맞춰야 지연 안내가 엉뚱하게 뜨지 않는다. */
 function shortlyAfter(iso: string): number {
@@ -77,39 +71,24 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   const { state, unreadable } = demoEntry ? { state: demoEntry.state, unreadable: false } : await loadState();
   const now = demoEntry?.now ?? renderTime();
   const issues = sortIssues(state.lastSuccess?.issues ?? []);
+  const today = kstDay(new Date(now));
+  // 날짜 목록 파일 1개만 읽는다 (과거 날짜 내용은 고른 날짜 화면에서 그 파일만 읽음)
+  const recent = await loadRecentHistory(today);
 
   return (
-    <>
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:py-12">
-        <header className="flex items-center gap-3">
-          <span
-            aria-hidden="true"
-            className="flex h-12 w-12 items-center justify-center rounded-2xl bg-lavender-100 text-2xl shadow-soft"
-          >
-            🛰️
-          </span>
-          <div>
-            <h1 className="font-display text-[28px] leading-tight text-ink sm:text-4xl">중기부 이슈레이더</h1>
-            <p className="text-sm text-ink-soft">매일 아침, 중소기업·소상공인 정책 이슈를 한눈에</p>
-          </div>
-        </header>
-        <div className="mt-6 space-y-4">
-          <StatusBanner state={state} now={now} unreadable={unreadable} />
-          <SummaryBar result={state.lastSuccess} />
+    <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:py-12">
+      <PageHeader />
+      <div className="mt-6 space-y-4">
+        <StatusBanner state={state} now={now} unreadable={unreadable} />
+        <SummaryBar result={state.lastSuccess} />
+        <HistoryPicker recent={recent} today={today} />
+      </div>
+      {/* 저장된 결과가 아예 없으면 상태 안내만 보여주고 필터·카드 영역은 숨긴다. */}
+      {state.lastSuccess && (
+        <div className="mt-8">
+          <IssueBoard issues={issues} />
         </div>
-        {/* 저장된 결과가 아예 없으면 상태 안내만 보여주고 필터·카드 영역은 숨긴다. */}
-        {state.lastSuccess && (
-          <div className="mt-8">
-            <IssueBoard issues={issues} />
-          </div>
-        )}
-      </main>
-
-      {/* ⑥ 바닥글 — PRD 5장·7장의 고정 안내 문구 */}
-      <footer className="mt-10 border-t border-line px-4 py-6 text-center text-xs leading-6 text-ink-soft">
-        <p>✨ AI가 생성한 분석으로, 사실 확인이 필요합니다.</p>
-        <p>원문은 언론사 사정에 따라 열리지 않을 수 있습니다.</p>
-      </footer>
-    </>
+      )}
+    </main>
   );
 }

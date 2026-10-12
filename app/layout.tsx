@@ -28,7 +28,14 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ko" className={`${pretendard.variable} ${jua.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        {/* ⑥ 바닥글 — PRD 5장·7장의 고정 안내 문구 (최신·과거 날짜 화면 공통) */}
+        <footer className="mt-10 border-t border-line px-4 py-6 text-center text-xs leading-6 text-ink-soft">
+          <p>✨ AI가 생성한 분석으로, 사실 확인이 필요합니다.</p>
+          <p>원문은 언론사 사정에 따라 열리지 않을 수 있습니다.</p>
+        </footer>
+      </body>
     </html>
   );
 }

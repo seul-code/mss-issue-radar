@@ -134,6 +134,40 @@ export interface RunRecord {
   leaseUntil?: string;
   /** 실행이 끝난 시각 (UTC ISO) */
   finishedAt?: string;
+  /** 날짜별 기록 보관 중 실패한 단계와 이유. 최신 결과는 정상 저장됐을 수 있다. 다음 실행이 자동으로 채운다. */
+  historyError?: string;
+}
+
+/** 날짜별 기록에 남기는 실행 상태 (진행 중은 남기지 않는다) */
+export type HistoryStatus = "success" | "empty" | "failed";
+
+/**
+ * 성공한 날의 분석 결과 1개 파일 (issue-radar/history/YYYY-MM-DD.json).
+ * 한 번 쓰면 덮어쓰지 않는다. 기사 전문 없이 화면에 쓰는 내용(제목·출처·링크·요약·AI 분석)만 담는다.
+ */
+export interface DailyRecord {
+  /** 한국 날짜 YYYY-MM-DD */
+  date: string;
+  /** 결과가 만들어진 시각 (UTC ISO) */
+  generatedAt: string;
+  window?: CollectionWindow;
+  issues: Issue[];
+}
+
+/** 날짜 목록의 한 줄: 그날 자동 실행이 어떻게 끝났는지 */
+export interface HistoryEntry {
+  /** 한국 날짜 YYYY-MM-DD */
+  date: string;
+  status: HistoryStatus;
+  issueCount: number;
+  /** 실행 시각 (UTC ISO) */
+  at: string;
+}
+
+/** 연도별 날짜 목록 (issue-radar/history/index-YYYY.json). 날짜 오름차순. */
+export interface HistoryIndex {
+  year: number;
+  entries: HistoryEntry[];
 }
 
 /** Vercel Blob에 저장하는 파일 1개의 내용 (Design §2.1, §2 처리 5) */

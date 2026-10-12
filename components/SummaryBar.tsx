@@ -11,7 +11,8 @@ const IMPORTANCE_STATS: { key: Importance; label: string; icon: string; classNam
   { key: "low", label: "낮음", icon: "🌱", className: "bg-mint-50 text-mint-700" },
 ];
 
-export default function SummaryBar({ result }: { result: SuccessResult | null }) {
+/** label: 과거 날짜 화면에서는 "이 날의 이슈"처럼 바꿔 쓴다 */
+export default function SummaryBar({ result, label = "오늘의 이슈" }: { result: SuccessResult | null; label?: string }) {
   const issues = result?.issues ?? [];
 
   // 이슈 하나가 분야 2개에 걸칠 수 있어, 분야별 합은 전체 수보다 클 수 있다.
@@ -24,12 +25,12 @@ export default function SummaryBar({ result }: { result: SuccessResult | null })
   const maxCount = Math.max(1, ...categoryCounts.map(({ count }) => count));
 
   return (
-    <section aria-label="오늘의 이슈 요약" className="space-y-3">
+    <section aria-label={`${label} 요약`} className="space-y-3">
       {/* 휴대폰: 총건수 한 줄 + 중요도 3칸 / 넓은 화면: 4칸 한 줄 */}
       <div className="grid grid-cols-3 gap-3 md:grid-cols-4">
         {/* 총건수 */}
         <div className="col-span-3 rounded-3xl bg-lavender-100 p-4 shadow-soft md:col-span-1">
-          <p className="text-sm font-semibold text-lavender-700">📰 오늘의 이슈</p>
+          <p className="text-sm font-semibold text-lavender-700">📰 {label}</p>
           <p className="mt-1 font-display text-4xl text-ink">
             <CountUp value={issues.length} />
             <span className="ml-1 text-xl">건</span>

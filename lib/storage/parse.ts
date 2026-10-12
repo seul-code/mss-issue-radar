@@ -6,6 +6,10 @@ import { CATEGORIES } from "@/lib/categories";
 import type {
   Category,
   CollectionWindow,
+  DailyRecord,
+  HistoryEntry,
+  HistoryIndex,
+  HistoryStatus,
   Importance,
   Issue,
   RadarState,
@@ -144,7 +148,51 @@ function parseRunRecord(value: unknown): RunRecord {
   if (leaseUntil) record.leaseUntil = leaseUntil;
   const finishedAt = isoDate(value.finishedAt);
   if (finishedAt) record.finishedAt = finishedAt;
+  const historyError = str(value.historyError);
+  if (historyError) record.historyError = historyError;
   return record;
+}
+
+/** 한국 날짜 "YYYY-MM-DD" 형식이고 실제로 있는 날짜인지 */
+export function isDayString(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+/** 날짜별 결과 파일을 검사한다. 구조가 틀리면 StateFormatError, 이슈 하나만 틀리면 그 이슈만 뺀다. */
+export function parseDailyRecord(data: unknown): DailyRecord {
+  if (!isObj(data) || !isDayString(data.date) || !isoDate(data.generatedAt) || !Array.isArray(data.issues)) {
+    throw new StateFormatError("날짜별 기록의 형식이 맞지 않습니다");
+  }
+  const record: DailyRecord = {
+    date: data.date,
+    generatedAt: data.generatedAt as string,
+    issues: data.issues.map(parseIssue).filter((issue): issue is Issue => !!issue),
+  };
+  const window = parseWindow(data.window);
+  if (window) record.window = window;
+  return record;
+}
+
+const VALID_HISTORY_STATUS = new Set<string>(["success", "empty", "failed"]);
+
+/** 연도별 날짜 목록을 검사한다. 줄 하나만 틀리면 그 줄만 뺀다. */
+export function parseHistoryIndex(data: unknown, year: number): HistoryIndex {
+  if (!isObj(data) || data.year !== year || !Array.isArray(data.entries)) {
+    throw new StateFormatError("날짜 목록의 형식이 맞지 않습니다");
+  }
+  const entries = data.entries
+    .map((e): HistoryEntry | undefined => {
+      if (!isObj(e) || !isDayString(e.date) || !e.date.startsWith(`${year}-`)) return undefined;
+      const at = isoDate(e.at);
+      const status = typeof e.status === "string" && VALID_HISTORY_STATUS.has(e.status) ? (e.status as HistoryStatus) : undefined;
+      if (!at || !status) return undefined;
+      return { date: e.date, status, issueCount: typeof e.issueCount === "number" && e.issueCount >= 0 ? e.issueCount : 0, at };
+    })
+    .filter((e): e is HistoryEntry => !!e)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  return { year, entries };
 }
 
 /** 저장소에서 읽은 JSON을 검사해 RadarState로 돌려준다. 전체 구조가 틀리면 StateFormatError. */

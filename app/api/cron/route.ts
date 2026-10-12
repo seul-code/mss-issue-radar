@@ -1,10 +1,11 @@
 // Design Ref: §2.2 자동 실행 주소 — Vercel Cron이 하루 1회 부른다.
-// 비밀번호 확인 → 실행권 얻기(조건부 저장) → 시간 예산 안에서 실행 → 결과 저장.
+// 비밀번호 확인 → 실행권 얻기(조건부 저장) → 시간 예산 안에서 실행 → 날짜별 기록 보관 → 최신 결과 저장.
 // 실패해도 직전 성공 결과는 지키고 실패만 기록한다 (Design §5).
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { getAiMode } from "@/lib/ai/client";
 import { kstDay } from "@/lib/format";
+import { recordHistory } from "@/lib/history";
 import { runDailyPipeline } from "@/lib/pipeline";
 import { getStorageKind, getVersionedState, saveStateIfVersion, StateConflictError } from "@/lib/storage";
 import type { RadarState, RunRecord } from "@/lib/types";
@@ -150,7 +151,20 @@ export async function GET(request: Request) {
     console.error("[cron] 실패", message);
   }
 
-  // 실행권을 얻을 때의 버전 그대로일 때만 저장한다. 그 사이 누가 바꿨다면 덮어쓰지 않는다.
+  // 날짜별 기록 보관 (① 날짜별 파일 → ② 날짜 목록). 실패해도 최신 결과 저장(③)은 계속하고 이유만 남긴다.
+  let historyError: string | undefined;
+  try {
+    historyError = await recordHistory(previous, next);
+  } catch (error) {
+    historyError = `날짜별 기록 보관 실패: ${error instanceof Error ? error.message : String(error)}`.slice(0, MAX_ERROR_LENGTH);
+  }
+  if (historyError && next.lastRun) {
+    next = { ...next, lastRun: { ...next.lastRun, historyError } };
+    body = { ...body, historyError };
+    console.error("[cron] 날짜별 기록 보관 일부 실패", historyError);
+  }
+
+  // ③ 최신 결과 — 실행권을 얻을 때의 버전 그대로일 때만 저장한다. 그 사이 누가 바꿨다면 덮어쓰지 않는다.
   try {
     await saveStateIfVersion(next, claimVersion);
   } catch (error) {
@@ -158,7 +172,8 @@ export async function GET(request: Request) {
     return Response.json({ ...body, saved: false }, { status: 500 });
   }
 
-  // 저장이 끝났으니 대시보드를 새로 만들도록 신호를 보낸다 (방문자는 저장된 결과만 읽는다).
+  // 저장이 끝났으니 대시보드와 오늘 날짜 화면을 새로 만들도록 신호를 보낸다 (방문자는 저장된 결과만 읽는다).
   revalidatePath("/");
+  revalidatePath(`/d/${kstDay(now)}`);
   return Response.json({ ...body, saved: true }, { status: body.status === "failed" ? 500 : 200 });
 }
