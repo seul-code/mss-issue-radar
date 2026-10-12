@@ -3,6 +3,7 @@
 중소벤처기업부 관련 뉴스·정책 이슈를 하루 1회 모아 AI로 분류·요약해 보여주는 **개인 학습용** 대시보드입니다.
 중소벤처기업부 공식 서비스가 아닙니다. 검색엔진 색인은 막아 두었습니다.
 
+- 접속 주소: https://mss-issue-radar.vercel.app (매일 한국 시각 7시대 갱신. 첫 자동 실행 전에는 "아직 수집된 이슈가 없습니다"로 보임)
 - 요구사항: [PRD.md](PRD.md) · 설계: [DESIGN.md](DESIGN.md) · 작업 계획: [PLAN.md](PLAN.md) · 작업 규칙: [CLAUDE.md](CLAUDE.md)
 - 기술: Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS v4 · Vercel (Cron, Blob)
 
