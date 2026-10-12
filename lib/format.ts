@@ -12,3 +12,25 @@ const kstFormatter = new Intl.DateTimeFormat("ko-KR", {
 export function formatKst(iso: string): string {
   return kstFormatter.format(new Date(iso));
 }
+
+const kstDateFormatter = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
+  month: "long",
+  day: "numeric",
+  weekday: "short",
+});
+
+/** UTC ISO 시각을 한국 날짜 "10월 7일 (수)" 형태로 바꾼다 (집계 기준일 표시용). */
+export function formatKstDate(iso: string): string {
+  return kstDateFormatter.format(new Date(iso)).replace(/\s*\((.)\)$/, " ($1)");
+}
+
+/** 한국 날짜 "YYYY-MM-DD" (문자열 비교로 날짜 앞뒤를 알 수 있다) */
+export function kstDay(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(date);
+}
+
+/** 한국 시각의 시(0~23) */
+export function kstHour(date: Date): number {
+  return Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", hour: "numeric", hourCycle: "h23" }).format(date));
+}

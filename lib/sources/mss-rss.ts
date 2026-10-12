@@ -1,5 +1,6 @@
 // Design Ref: §2 입력 ⓐ — 중기부 보도자료 RSS 수집기 (무료, 키 없음).
 // RSS 구조가 단순해 별도 라이브러리 없이 정규식으로 읽는다 (Design §3 "쓰지 않는 것").
+import { timeoutSignal } from "@/lib/abort";
 import { kstToIso, readTag } from "@/lib/sources/xml";
 import type { RawItem } from "@/lib/types";
 
@@ -36,10 +37,10 @@ export function parseMssRss(xml: string): RawItem[] {
 }
 
 /** 중기부 RSS를 받아 기사 목록으로 돌려준다. 실패하면 오류를 던지고, 다른 출처 진행 여부는 호출한 쪽이 정한다. */
-export async function fetchMssRss(): Promise<RawItem[]> {
+export async function fetchMssRss(signal?: AbortSignal): Promise<RawItem[]> {
   const res = await fetch(MSS_RSS_URL, {
     cache: "no-store", // 하루 1회 실행마다 최신 RSS를 받는다.
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: timeoutSignal(TIMEOUT_MS, signal),
   });
   if (!res.ok) throw new Error(`중기부 RSS 응답 오류: HTTP ${res.status}`);
   return parseMssRss(await res.text());

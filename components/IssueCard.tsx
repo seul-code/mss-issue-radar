@@ -1,12 +1,13 @@
 // Design Ref: §1 ⑤ 이슈 카드 — PRD 5장 카드 9개 항목을 모두 보여주되, 훑어보기 쉽게 짧게 구성한다.
 //   기본: 중요도·분야·원문 링크 → 제목 → 출처·날짜 → 📄 기사 내용 3줄 → 🔍 AI 분석(중기부 연관성)
-//   '상세 분석 보기'(펼치기): 기사 내용 4~5줄 · 🎯 중요도 판단 근거 · 💡 AI 제안(업무 활용 아이디어) · 🔎 추가 확인사항
+//   '상세 분석 보기'(펼치기): 기사 내용 4~5줄 · 🔗 근거 기사 · 🎯 중요도 판단 근거 · 💡 AI 제안(업무 활용 아이디어) · 🔎 추가 확인사항
+//   기사 내용 줄 끝의 [번호]는 근거 기사 번호, "수치 확인 필요"는 원문에서 같은 값을 찾지 못했다는 코드 점검 표시다 (사실 검증 보장 아님).
 // 기사 사실 / AI 분석(추정) / AI 제안(참고용)을 색·테두리·이름표로 확실히 구분해, AI 추론이 사실처럼 보이지 않게 한다.
 // 상호작용은 기본 <details> 요소와 CSS만 쓰므로 서버·클라이언트 어디서든 쓸 수 있다.
 import type { CSSProperties, ReactNode } from "react";
 import { CATEGORY_EMOJI } from "@/lib/categories";
 import { formatKst } from "@/lib/format";
-import type { Importance, Issue } from "@/lib/types";
+import type { Importance, Issue, SummaryEvidence } from "@/lib/types";
 
 /** 중요도는 색 + 아이콘 + 글자를 함께 써서 색을 구분하기 어려워도 알아볼 수 있게 한다. */
 const IMPORTANCE_STYLE: Record<Importance, { text: string; icon: string; badge: string; edge: string }> = {
@@ -29,13 +30,35 @@ function SectionLabel({ icon, children, tag, tagClass }: { icon: string; childre
   );
 }
 
-function FactList({ points }: { points: string[] }) {
+/** 요약 한 줄 + 코드 점검 결과(근거 기사 번호, 원문에서 찾지 못한 수치) */
+interface FactPoint {
+  text: string;
+  evidence?: SummaryEvidence;
+}
+
+function FactList({ points, showSourceNumbers }: { points: FactPoint[]; showSourceNumbers: boolean }) {
   return (
     <ul className="space-y-1 text-[15.5px] leading-[1.7] text-ink">
-      {points.map((point) => (
-        <li key={point} className="flex gap-2">
+      {points.map(({ text, evidence }) => (
+        <li key={text} className="flex gap-2">
           <span aria-hidden="true" className="mt-[11px] h-1.5 w-1.5 shrink-0 rounded-full bg-mint-600" />
-          <span>{point}</span>
+          <span>
+            {text}
+            {/* 근거 기사 번호: 아래 '근거 기사' 목록의 번호와 같다 */}
+            {showSourceNumbers && evidence?.source !== null && evidence?.source !== undefined && (
+              <sup className="ml-0.5 text-[11px] font-semibold text-mint-700">
+                <span className="sr-only">근거 기사 </span>[{evidence.source + 1}]
+              </sup>
+            )}
+            {evidence && evidence.unverifiedNumbers.length > 0 && (
+              <span
+                className="ml-1.5 inline-block rounded-full bg-butter-100 px-2 py-px align-middle text-[11px] font-semibold text-butter-700"
+                title={`원문에서 같은 값을 찾지 못함: ${evidence.unverifiedNumbers.join(", ")}`}
+              >
+                수치 확인 필요
+              </span>
+            )}
+          </span>
         </li>
       ))}
     </ul>
@@ -45,8 +68,13 @@ function FactList({ points }: { points: string[] }) {
 export default function IssueCard({ issue, style }: { issue: Issue; style?: CSSProperties }) {
   const importance = IMPORTANCE_STYLE[issue.importance];
   // 예전 형식(한 문장)으로 저장된 결과도 깨지지 않게 목록으로 맞춘다
-  const points = ([] as string[]).concat(issue.summary);
+  const points: FactPoint[] = ([] as string[])
+    .concat(issue.summary)
+    .map((text, index) => ({ text, evidence: issue.summaryEvidence?.[index] }));
   const morePoints = points.slice(VISIBLE_POINTS);
+  // 보조 기사가 있을 때만 줄마다 근거 번호를 단다 (대표 1개뿐이면 번호가 의미 없음)
+  const sources = issue.sources ?? [];
+  const showSourceNumbers = sources.length > 1;
 
   return (
     <article
@@ -88,7 +116,7 @@ export default function IssueCard({ issue, style }: { issue: Issue; style?: CSSP
         <SectionLabel icon="📄">
           <span className="text-ink-soft">기사 내용</span>
         </SectionLabel>
-        <FactList points={points.slice(0, VISIBLE_POINTS)} />
+        <FactList points={points.slice(0, VISIBLE_POINTS)} showSourceNumbers={showSourceNumbers} />
       </section>
 
       {/* 6. 중기부 연관성 — AI의 추정 (라벤더 영역) */}
@@ -109,7 +137,32 @@ export default function IssueCard({ issue, style }: { issue: Issue; style?: CSSP
           <span className="hidden group-open:inline">상세 분석 접기</span>
         </summary>
         <div className="space-y-3 pt-2">
-          {morePoints.length > 0 && <FactList points={morePoints} />}
+          {morePoints.length > 0 && <FactList points={morePoints} showSourceNumbers={showSourceNumbers} />}
+
+          {/* 근거 기사: AI가 요약할 때 실제로 읽은 기사들 (0번 = 대표 원문). 사실 확인은 원문에서 한다. */}
+          {showSourceNumbers && (
+            <div className="rounded-2xl bg-mint-50 px-3.5 py-3">
+              <SectionLabel icon="🔗">
+                <span className="text-mint-700">근거 기사</span>
+              </SectionLabel>
+              <ol className="mt-1 space-y-0.5 text-[13.5px] leading-[1.7]">
+                {sources.map((source, index) => (
+                  <li key={source.url} className="flex gap-1.5">
+                    <span className="shrink-0 font-semibold text-mint-700">[{index + 1}]</span>
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-ink underline decoration-mint-300 underline-offset-2 hover:decoration-mint-700"
+                    >
+                      {source.publisher}
+                      {index === 0 && " (대표)"} · {formatKst(source.publishedAt)} ↗
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
 
           {issue.importanceReason && (
             <div className="rounded-2xl bg-lavender-50 px-3.5 py-3 ring-1 ring-lavender-100">
@@ -117,6 +170,17 @@ export default function IssueCard({ issue, style }: { issue: Issue; style?: CSSP
                 <span className="text-lavender-700">중요도 {importance.text}인 이유</span>
               </SectionLabel>
               <p className="mt-1 text-[14.5px] leading-[1.7] text-ink">{issue.importanceReason}</p>
+            </div>
+          )}
+          {/* 판단 근거가 비어 있던 이슈: 이슈는 남기고 경고만 표시한다 */}
+          {issue.importanceReasonMissing && !issue.importanceReason && (
+            <div className="rounded-2xl bg-butter-100 px-3.5 py-3">
+              <SectionLabel icon="⚠️">
+                <span className="text-butter-700">중요도 {importance.text} — 판단 근거 없음</span>
+              </SectionLabel>
+              <p className="mt-1 text-[14.5px] leading-[1.7] text-ink">
+                AI가 판단 근거를 제시하지 않았습니다. 중요도는 원문을 보고 확인해 주세요.
+              </p>
             </div>
           )}
 

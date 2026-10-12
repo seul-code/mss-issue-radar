@@ -61,7 +61,7 @@ app/
   api/cron/route.ts   # 하루 1회 수집·분석 실행
 components/           # 화면 컴포넌트
 lib/
-  sources/            # RSS 수집, 웹 검색
+  sources/            # RSS·정책뉴스 API 수집 (AI 웹 검색은 쓰지 않음 — PRD 참고)
   ai/                 # OpenAI 호출, 프롬프트, 응답 검증
   storage/            # (외부 저장소가 승인된 경우에만 추가)
 ```

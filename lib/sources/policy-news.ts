@@ -1,6 +1,7 @@
 // Design Ref: §2 입력 ⓑ — 정책브리핑 정책뉴스 API 수집기 (공공데이터포털, 무료, 인증키 필요).
 // 전 부처 정책뉴스가 오므로 관련 기사 고르기는 전처리(키워드)와 AI 1차 선별이 한다.
 // 이 파일은 서버에서만 쓴다. 인증키는 .env의 DATA_GO_KR_API_KEY에서 읽고 오류 메시지·로그에 남기지 않는다.
+import { timeoutSignal } from "@/lib/abort";
 import { DETAIL_MAX, EXCERPT_MAX } from "@/lib/sources/preprocess";
 import { decodeEntities, kstToIso, readTag, stripContacts, toPlainText } from "@/lib/sources/xml";
 import type { RawItem } from "@/lib/types";
@@ -65,7 +66,7 @@ function kstDate(date: Date): string {
  * 정책뉴스를 받아 기사 목록으로 돌려준다. 48시간 확장에도 쓸 수 있게 이틀 전 날짜부터 요청하고,
  * 정확한 기간 거르기는 전처리가 한다. 실패하면 오류를 던지고, 다른 출처 진행 여부는 호출한 쪽이 정한다.
  */
-export async function fetchPolicyNews(now: Date): Promise<RawItem[]> {
+export async function fetchPolicyNews(now: Date, signal?: AbortSignal): Promise<RawItem[]> {
   const key = process.env.DATA_GO_KR_API_KEY;
   if (!key) throw new Error("DATA_GO_KR_API_KEY 환경변수가 없습니다");
 
@@ -77,7 +78,7 @@ export async function fetchPolicyNews(now: Date): Promise<RawItem[]> {
 
   let res: Response;
   try {
-    res = await fetch(`${POLICY_NEWS_URL}?${params}`, { cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) });
+    res = await fetch(`${POLICY_NEWS_URL}?${params}`, { cache: "no-store", signal: timeoutSignal(TIMEOUT_MS, signal) });
   } catch (error) {
     // 네트워크 오류 메시지에 요청 주소(키 포함)가 섞이지 않도록 이유만 남긴다.
     throw new Error(`정책뉴스 API 연결 실패: ${error instanceof Error ? error.name : "알 수 없음"}`);

@@ -28,6 +28,22 @@ export const sampleIssues: Issue[] = [
     ],
     followUp: "적용 대상 업종과 신청 기간은 원문에서 확인 필요",
     sourceUrl: "https://www.mss.go.kr/site/smba/ex/bbs/View.do?cbIdx=86&bcIdx=1071601",
+    // 근거 기사 목록·요약 점검 표시 확인용 (보조 기사는 example.com 가상 자료, 넷째 줄은 "수치 확인 필요" 예시)
+    sources: [
+      {
+        url: "https://www.mss.go.kr/site/smba/ex/bbs/View.do?cbIdx=86&bcIdx=1071601",
+        publisher: "중소벤처기업부",
+        publishedAt: "2026-10-06T00:16:05Z",
+      },
+      { url: "https://example.com/news/sample-01-a", publisher: "샘플일보", publishedAt: "2026-10-06T01:20:00Z" },
+    ],
+    summaryEvidence: [
+      { source: 0, unverifiedNumbers: [] },
+      { source: 0, unverifiedNumbers: [] },
+      { source: 1, unverifiedNumbers: [] },
+      { source: null, unverifiedNumbers: [] },
+      { source: 0, unverifiedNumbers: ["3주차"] },
+    ],
   },
   {
     id: "sample-02",
@@ -35,6 +51,8 @@ export const sampleIssues: Issue[] = [
     publishedAt: "2026-09-30T23:42:43Z",
     sourceName: "중소벤처기업부",
     importance: "high",
+    // 판단 근거 누락 경고 표시 확인용
+    importanceReasonMissing: true,
     categories: ["전통시장", "지역경제"],
     summary: ["온누리상품권이 전통시장과 지방상권을 중심으로 18년 만에 개편된다."],
     relevance: "전통시장 지원의 핵심 수단이 바뀌는 사안으로, 관련 사업 안내 자료의 갱신이 필요하다.",
@@ -177,8 +195,32 @@ const GENERATED_AT = "2026-10-06T22:10:00Z";
 
 /** 정상: 오늘 자동 실행이 성공해 12건을 만든 상태 */
 export const normalState: RadarState = {
-  lastSuccess: { issues: sampleIssues, generatedAt: GENERATED_AT },
+  lastSuccess: {
+    issues: sampleIssues,
+    generatedAt: GENERATED_AT,
+    window: { from: "2026-10-05T22:10:00Z", to: GENERATED_AT, hours: 24 },
+  },
   lastRun: { at: GENERATED_AT, status: "success", issueCount: sampleIssues.length },
+};
+
+/** 지연: 예약 실행이 오늘 돌지 않아 어제 결과를 보여주는 상태 (화면 기준 시각은 STALE_NOW) */
+export const staleState: RadarState = normalState;
+export const STALE_NOW = "2026-10-08T01:30:00Z";
+
+/** 중단: 실행권을 얻은 뒤 함수가 강제 종료돼 running 기록만 남은 상태 */
+export const interruptedState: RadarState = {
+  lastSuccess: {
+    issues: sampleIssues,
+    generatedAt: "2026-10-05T22:08:00Z",
+    window: { from: "2026-10-03T22:08:00Z", to: "2026-10-05T22:08:00Z", hours: 48 },
+  },
+  lastRun: {
+    at: "2026-10-06T22:09:00Z",
+    status: "running",
+    issueCount: 0,
+    runId: "sample-run",
+    leaseUntil: "2026-10-06T22:15:00Z",
+  },
 };
 
 /** 0건: 오늘은 관련 이슈가 없어 직전 결과를 계속 보여주는 상태 (주말·공휴일) */
