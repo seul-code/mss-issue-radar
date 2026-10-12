@@ -3,8 +3,8 @@ import { formatKst } from "@/lib/format";
 import type { RadarState } from "@/lib/types";
 
 const STYLE = {
-  warning: "bg-coral-100 text-coral-600 ring-coral-300",
-  info: "bg-butter-100 text-butter-600 ring-butter-100",
+  warning: "bg-coral-100 text-coral-700 ring-coral-300",
+  info: "bg-butter-100 text-butter-700 ring-butter-300",
 };
 
 export default function StatusBanner({ state }: { state: RadarState }) {

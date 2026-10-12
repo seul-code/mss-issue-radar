@@ -53,6 +53,8 @@ export interface Issue {
   sourceName: string;
   /** 3. 중요도 */
   importance: Importance;
+  /** 3. 중요도를 고른 근거 (AI 판단, 정책 관련성·파급력·시급성·후속 조치 기준). 이전 결과에는 없을 수 있다. */
+  importanceReason?: string;
   /** 4. 분야 1~2개, 관련 깊은 순 */
   categories: Category[];
   /** 5. 핵심내용 — 원문에 있는 사실만, 항목형 3~5줄 (무엇을·대상·규모·일정·방법 등) */

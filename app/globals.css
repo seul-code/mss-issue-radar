@@ -18,21 +18,26 @@
   --color-lavender-100: #eee8ff;
   --color-lavender-300: #c9bbf5;
   --color-lavender-600: #6b57c9;
+  --color-lavender-700: #5141b0;
 
   /* 민트 — 통계, 정보 */
   --color-mint-50: #f0faf5;
   --color-mint-100: #e3f6ee;
   --color-mint-300: #a8e2c8;
   --color-mint-600: #2e8a68;
+  --color-mint-700: #1f6e52;
 
   /* 코랄 — 중요도 높음, 실패 안내 */
   --color-coral-100: #ffe7e2;
   --color-coral-300: #ffb8aa;
   --color-coral-600: #c9463d;
+  --color-coral-700: #a3322b;
 
   /* 버터 — 중요도 보통, 0건 안내 */
   --color-butter-100: #fff3cf;
   --color-butter-600: #9a6b00;
+  --color-butter-700: #765200;
+  --color-butter-300: #f2d98a;
 
   /* 글꼴: 본문 Pretendard, 제목·숫자 Jua */
   --font-sans: var(--font-pretendard), "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
@@ -49,7 +54,7 @@
   @keyframes rise {
     from {
       opacity: 0;
-      transform: translateY(10px);
+      transform: translateY(6px);
     }
     to {
       opacity: 1;

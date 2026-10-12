@@ -2,7 +2,7 @@
 // AI 웹 검색은 정부 누리집이나 몇 년 전 기사만 찾아 최신 언론 기사가 0건이었다 (2026-10-12 실제 점검).
 // 화면에는 제목·원문 링크와 AI가 쓴 사실 요약만 쓰고, RSS 본문은 AI 판단에만 쓴다 (PRD 7장 저작권).
 import { DETAIL_MAX, EXCERPT_MAX } from "@/lib/sources/preprocess";
-import { readTag, stripContacts, toPlainText } from "@/lib/sources/xml";
+import { decodeEntities, readTag, stripContacts, toPlainText } from "@/lib/sources/xml";
 import type { RawItem } from "@/lib/types";
 
 /**
@@ -61,7 +61,8 @@ export function parseNewsRss(xml: string, publisher: string): RawItem[] {
 
     items.push({
       source: "news-rss",
-      title: toPlainText(title),
+      // 일부 언론사는 따옴표를 두 번 감싸 보내므로(&amp;quot;) 한 번 더 푼다
+      title: decodeEntities(toPlainText(title)),
       url,
       publisher,
       publishedAt,

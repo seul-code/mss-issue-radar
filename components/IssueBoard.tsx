@@ -12,7 +12,7 @@ type Filter = "전체" | Category;
 const FILTERS: readonly Filter[] = ["전체", ...CATEGORIES];
 
 /** 카드가 차례로 나타나는 간격 (최대 0.4초까지만 늦춘다) */
-const STAGGER_MS = 40;
+const STAGGER_MS = 30;
 const MAX_DELAY_MS = 400;
 
 /** issues는 이미 정렬된 상태로 받는다. */
@@ -55,9 +55,9 @@ export default function IssueBoard({ issues }: { issues: Issue[] }) {
       </nav>
 
       {/* 분야를 바꾸면 목록을 새로 그려 카드가 다시 부드럽게 나타난다 */}
-      <div key={selected} className="mt-5 animate-fade">
+      <div key={selected} className="mt-6 animate-fade">
         {visible.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-5 md:grid-cols-2">
             {visible.map((issue, index) => (
               <IssueCard
                 key={issue.id}

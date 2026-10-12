@@ -148,6 +148,7 @@ export function analysisToIssues(candidates: RawItem[], response: AnalysisRespon
       publishedAt: source.publishedAt,
       sourceName: source.publisher,
       importance,
+      importanceReason: clean(answer.importanceReason),
       categories,
       summary,
       relevance: clean(answer.relevance) ?? NO_EVIDENCE_TEXT,

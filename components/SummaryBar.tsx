@@ -6,9 +6,9 @@ import { formatKst } from "@/lib/format";
 import type { Importance, SuccessResult } from "@/lib/types";
 
 const IMPORTANCE_STATS: { key: Importance; label: string; icon: string; className: string }[] = [
-  { key: "high", label: "높음", icon: "🔥", className: "bg-coral-100 text-coral-600" },
-  { key: "medium", label: "보통", icon: "⭐", className: "bg-butter-100 text-butter-600" },
-  { key: "low", label: "낮음", icon: "🌱", className: "bg-mint-50 text-mint-600" },
+  { key: "high", label: "높음", icon: "🔥", className: "bg-coral-100 text-coral-700" },
+  { key: "medium", label: "보통", icon: "⭐", className: "bg-butter-100 text-butter-700" },
+  { key: "low", label: "낮음", icon: "🌱", className: "bg-mint-50 text-mint-700" },
 ];
 
 export default function SummaryBar({ result }: { result: SuccessResult | null }) {
@@ -29,12 +29,12 @@ export default function SummaryBar({ result }: { result: SuccessResult | null })
       <div className="grid grid-cols-3 gap-3 md:grid-cols-4">
         {/* 총건수 */}
         <div className="col-span-3 rounded-3xl bg-lavender-100 p-4 shadow-soft md:col-span-1">
-          <p className="text-sm font-semibold text-lavender-600">📰 오늘의 이슈</p>
+          <p className="text-sm font-semibold text-lavender-700">📰 오늘의 이슈</p>
           <p className="mt-1 font-display text-4xl text-ink">
             <CountUp value={issues.length} />
             <span className="ml-1 text-xl">건</span>
           </p>
-          <p className="mt-1 text-xs text-ink-soft">
+          <p className="mt-1 text-[13px] text-ink-soft">
             마지막 업데이트 {result ? formatKst(result.generatedAt) : "-"}
           </p>
         </div>
@@ -46,18 +46,24 @@ export default function SummaryBar({ result }: { result: SuccessResult | null })
               {icon} <span className="sr-only">중요도 </span>
               {label}
             </p>
+            {/* 카운트업은 총건수에만 쓰고, 중요도 숫자는 바로 보여준다 (움직임 최소화) */}
             <p className="mt-1 font-display text-2xl sm:text-3xl">
-              <CountUp value={issues.filter((issue) => issue.importance === key).length} />
+              {issues.filter((issue) => issue.importance === key).length}
               <span className="ml-1 text-base sm:text-lg">건</span>
             </p>
           </div>
         ))}
       </div>
 
-      {/* 분야별: 막대 그래프 */}
+      {/* 분야별: 막대 그래프 — 아래 분야 칩과 정보가 겹쳐 기본은 접어 둔다 */}
       {categoryCounts.length > 0 && (
-        <div className="rounded-3xl bg-cream p-4 shadow-soft">
-          <p className="text-sm font-semibold text-mint-600">📊 분야별 이슈</p>
+        <details className="group rounded-3xl bg-cream px-4 py-3 shadow-soft">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-mint-700 [&::-webkit-details-marker]:hidden">
+            <span aria-hidden="true" className="transition-transform duration-200 group-open:rotate-90">
+              ▸
+            </span>
+            📊 분야별 이슈 {categoryCounts.length}개 분야 보기
+          </summary>
           <ul className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
             {categoryCounts.map(({ category, count }) => (
               <li key={category} className="flex items-center gap-2 text-sm">
@@ -74,10 +80,10 @@ export default function SummaryBar({ result }: { result: SuccessResult | null })
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-xs text-ink-soft">
+          <p className="mt-3 text-[13px] text-ink-soft">
             ⓘ 이슈 1건이 분야 2개에 걸칠 수 있어, 분야별 합계가 전체 건수보다 클 수 있어요.
           </p>
-        </div>
+        </details>
       )}
     </section>
   );
