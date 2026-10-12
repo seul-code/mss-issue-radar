@@ -49,23 +49,34 @@ export default async function Home({ searchParams }: PageProps<"/">) {
 
   return (
     <>
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
-        <h1 className="text-2xl font-bold">중기부 이슈레이더</h1>
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:py-12">
+        <header className="flex items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="flex h-12 w-12 items-center justify-center rounded-2xl bg-lavender-100 text-2xl shadow-soft"
+          >
+            🛰️
+          </span>
+          <div>
+            <h1 className="font-display text-[28px] leading-tight text-ink sm:text-4xl">중기부 이슈레이더</h1>
+            <p className="text-sm text-ink-soft">매일 아침, 중소기업·소상공인 정책 이슈를 한눈에</p>
+          </div>
+        </header>
         <div className="mt-6 space-y-4">
           <StatusBanner state={state} />
           <SummaryBar result={state.lastSuccess} />
         </div>
         {/* 저장된 결과가 아예 없으면 상태 안내만 보여주고 필터·카드 영역은 숨긴다. */}
         {state.lastSuccess && (
-          <div className="mt-6">
+          <div className="mt-8">
             <IssueBoard issues={issues} />
           </div>
         )}
       </main>
 
       {/* ⑥ 바닥글 — PRD 5장·7장의 고정 안내 문구 */}
-      <footer className="border-t border-zinc-200 px-4 py-6 text-center text-xs leading-6 text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
-        <p>AI가 생성한 분석으로, 사실 확인이 필요합니다.</p>
+      <footer className="mt-10 border-t border-line px-4 py-6 text-center text-xs leading-6 text-ink-soft">
+        <p>✨ AI가 생성한 분석으로, 사실 확인이 필요합니다.</p>
         <p>원문은 언론사 사정에 따라 열리지 않을 수 있습니다.</p>
       </footer>
     </>

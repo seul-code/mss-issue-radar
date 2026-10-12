@@ -1,12 +1,23 @@
-// Design Ref: §1 — 모든 화면이 공유하는 틀. 한국어 문서, 한글 글꼴, 서비스 제목을 정한다.
+// Design Ref: §1 — 모든 화면이 공유하는 틀. 한국어 문서, 글꼴(본문 Pretendard · 제목 Jua), 서비스 제목을 정한다.
 import type { Metadata } from "next";
-import { Noto_Sans_KR } from "next/font/google";
+import { Jua } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-// 한글 글꼴을 앱에 내장한다. 한글 글자는 필요한 부분만 나눠서 내려받는다.
-const notoSansKr = Noto_Sans_KR({
-  variable: "--font-noto-sans-kr",
+// 본문 글꼴: Pretendard (SIL OFL 1.1, app/fonts/Pretendard-LICENSE.txt). 앱에 파일로 넣어 외부 접속 없이 쓴다.
+const pretendard = localFont({
+  src: "./fonts/PretendardVariable.woff2",
+  variable: "--font-pretendard",
+  weight: "45 920",
+  display: "swap",
+});
+
+// 제목·숫자 글꼴: Jua (Google Fonts, 빌드할 때 앱에 내장됨)
+const jua = Jua({
+  variable: "--font-jua",
+  weight: "400",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -16,7 +27,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="ko" className={`${notoSansKr.variable} h-full antialiased`}>
+    <html lang="ko" className={`${pretendard.variable} ${jua.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

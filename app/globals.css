@@ -1,25 +1,108 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * 디자인 체계 — '귀엽고 아기자기한 AI 정책 뉴스 브리핑' (2026-10-12)
+ * 따뜻한 아이보리 밝은 테마 하나만 쓴다 (다크 모드 없음).
+ * 포인트 색: 라벤더(AI 분석) · 민트(통계·정보) · 코랄(중요도 높음·실패) · 버터(중요도 보통)
+ */
+@theme {
+  /* 바탕·글자 */
+  --color-ivory: #fff9ef;
+  --color-cream: #fffdf8;
+  --color-ink: #2f2a3b;
+  --color-ink-soft: #6b6478;
+  --color-line: #efe6d8;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-noto-sans-kr), sans-serif;
-}
+  /* 라벤더 — AI 인사이트, 선택된 필터 */
+  --color-lavender-50: #f6f2ff;
+  --color-lavender-100: #eee8ff;
+  --color-lavender-300: #c9bbf5;
+  --color-lavender-600: #6b57c9;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  /* 민트 — 통계, 정보 */
+  --color-mint-50: #f0faf5;
+  --color-mint-100: #e3f6ee;
+  --color-mint-300: #a8e2c8;
+  --color-mint-600: #2e8a68;
+
+  /* 코랄 — 중요도 높음, 실패 안내 */
+  --color-coral-100: #ffe7e2;
+  --color-coral-300: #ffb8aa;
+  --color-coral-600: #c9463d;
+
+  /* 버터 — 중요도 보통, 0건 안내 */
+  --color-butter-100: #fff3cf;
+  --color-butter-600: #9a6b00;
+
+  /* 글꼴: 본문 Pretendard, 제목·숫자 Jua */
+  --font-sans: var(--font-pretendard), "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-display: var(--font-jua), var(--font-pretendard), sans-serif;
+
+  /* 부드러운 그림자 */
+  --shadow-soft: 0 2px 12px rgb(120 90 60 / 0.07);
+  --shadow-lift: 0 10px 24px rgb(120 90 60 / 0.13);
+
+  /* 움직임: 카드 등장, 목록 전환 */
+  --animate-rise: rise 0.45s ease-out both;
+  --animate-fade: fade 0.25s ease-out both;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 }
 
+:root {
+  color-scheme: light;
+  /* '상세 분석 보기' 펼치기/접기 높이 애니메이션을 가능하게 한다 (지원하지 않는 브라우저는 바로 펼쳐짐) */
+  interpolate-size: allow-keywords;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--color-ivory);
+  color: var(--color-ink);
   font-family: var(--font-sans);
+  /* 한국어는 단어 중간에서 줄을 바꾸지 않는다 (예: '이슈레이/더' 방지) */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* 펼치기/접기: 내용 영역 높이를 부드럽게 바꾼다 */
+details::details-content {
+  height: 0;
+  overflow: clip;
+  transition:
+    height 0.28s ease,
+    content-visibility 0.28s allow-discrete;
+}
+details[open]::details-content {
+  height: auto;
+}
+
+/* 컴퓨터의 '애니메이션 줄이기' 설정을 켜면 모든 움직임을 끈다 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after,
+  ::details-content {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
