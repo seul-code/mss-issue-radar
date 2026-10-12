@@ -37,6 +37,12 @@ export default function SummaryBar({ result }: { result: SuccessResult | null })
           <p className="mt-1 text-[13px] text-ink-soft">
             마지막 업데이트 {result ? formatKst(result.generatedAt) : "-"}
           </p>
+          {/* 집계 기준: 이 결과가 어느 기간의 자료로 만들어졌는지 */}
+          {result?.window && (
+            <p className="text-[13px] text-ink-soft">
+              집계 {formatKst(result.window.from)} ~ {formatKst(result.window.to)} ({result.window.hours}시간)
+            </p>
+          )}
         </div>
 
         {/* 중요도별 */}

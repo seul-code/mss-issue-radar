@@ -40,6 +40,29 @@ export interface RawItem {
    * 같은 사건으로 묶인 다른 기사의 본문도 여기에 합쳐진다.
    */
   detail?: string;
+  /**
+   * 대표 자료로 뽑혔을 때, detail에 실제로 들어간 기사들(대표 포함, 대표가 0번).
+   * AI가 실제로 본 기사만 근거 링크로 보여주고, 요약 줄의 근거 기사를 찾는 데 쓴다. text는 저장하지 않는다.
+   */
+  evidence?: { ref: SourceRef; text: string }[];
+}
+
+/** 근거 기사 링크 하나. 수집 단계에서 실제로 받은 주소·발행처·발행 시각만 담는다 (본문은 담지 않음). */
+export interface SourceRef {
+  url: string;
+  publisher: string;
+  /** UTC ISO */
+  publishedAt: string;
+}
+
+/**
+ * 요약 한 줄의 코드 점검 결과 (AI 호출 없음, 사실 검증을 보장하지 않는 참고 신호).
+ * - source: 이 줄의 근거로 보이는 Issue.sources 번호. 확신이 낮으면 null
+ * - unverifiedNumbers: 원문에서 같은 값을 찾지 못한 수치 표현
+ */
+export interface SummaryEvidence {
+  source: number | null;
+  unverifiedNumbers: string[];
 }
 
 /** 화면 카드 한 장 = 이슈 하나. 필드 순서는 PRD의 카드 9개 항목 순서를 따른다. */
@@ -55,6 +78,8 @@ export interface Issue {
   importance: Importance;
   /** 3. 중요도를 고른 근거 (AI 판단, 정책 관련성·파급력·시급성·후속 조치 기준). 이전 결과에는 없을 수 있다. */
   importanceReason?: string;
+  /** AI가 판단 근거를 주지 않았거나 너무 짧아 경고를 표시해야 하는 경우 true (이슈는 남긴다) */
+  importanceReasonMissing?: boolean;
   /** 4. 분야 1~2개, 관련 깊은 순 */
   categories: Category[];
   /** 5. 핵심내용 — 원문에 있는 사실만, 항목형 3~5줄 (무엇을·대상·규모·일정·방법 등) */
@@ -65,29 +90,50 @@ export interface Issue {
   ideas: string[];
   /** 8. 추가 확인사항 (최대 1개, 없으면 카드에서 숨김) */
   followUp?: string;
-  /** 9. 원문 링크 — 수집 단계에서 실제로 받은 주소만 허용 */
+  /** 9. 원문 링크 — 수집 단계에서 실제로 받은 주소만 허용 (카드 상단의 대표 출처) */
   sourceUrl: string;
+  /** 상세 영역의 근거 기사 목록. 0번은 대표(sourceUrl과 같음), 이후 AI가 함께 읽은 보조 기사. 이전 결과에는 없을 수 있다. */
+  sources?: SourceRef[];
+  /** summary[i]와 짝을 이루는 코드 점검 결과. 이전 결과에는 없을 수 있다. */
+  summaryEvidence?: SummaryEvidence[];
 }
 
-/** 자동 실행 한 번의 결과 상태 */
-export type RunStatus = "success" | "empty" | "failed";
+/** 자동 실행 한 번의 결과 상태. running = 실행권을 얻고 진행 중(또는 강제 종료돼 끝나지 못함) */
+export type RunStatus = "running" | "success" | "empty" | "failed";
+
+/** 결과를 만들 때 수집한 자료의 기간 (집계 기준) */
+export interface CollectionWindow {
+  /** 시작 시각 (UTC ISO) */
+  from: string;
+  /** 끝 시각 = 실행 시각 (UTC ISO) */
+  to: string;
+  hours: 24 | 48;
+}
 
 /** 마지막으로 성공한 분석 결과. 화면은 항상 이것을 보여준다. */
 export interface SuccessResult {
   issues: Issue[];
   /** 결과가 만들어진 시각 (UTC ISO). 화면의 "마지막 업데이트" */
   generatedAt: string;
+  /** 집계 기간. 이전 결과에는 없을 수 있다. */
+  window?: CollectionWindow;
 }
 
-/** 가장 최근 자동 실행 기록. 실패·0건 안내와 하루 1회 중복 방지에 쓴다. */
+/** 가장 최근 자동 실행 기록. 실패·0건·지연 안내와 하루 1회 중복 방지에 쓴다. */
 export interface RunRecord {
-  /** 실행 시각 (UTC ISO) */
+  /** 실행 시작 시각 (UTC ISO) */
   at: string;
   status: RunStatus;
   /** 이번 실행에서 만든 이슈 수 (기록용, 화면 숫자는 lastSuccess 기준) */
   issueCount: number;
   /** 실패 이유. 화면에는 표시하지 않는다. */
   error?: string;
+  /** 실행권을 얻은 실행의 식별값 */
+  runId?: string;
+  /** running 상태가 이 시각을 넘기면 강제 종료된 것으로 본다 (UTC ISO) */
+  leaseUntil?: string;
+  /** 실행이 끝난 시각 (UTC ISO) */
+  finishedAt?: string;
 }
 
 /** Vercel Blob에 저장하는 파일 1개의 내용 (Design §2.1, §2 처리 5) */

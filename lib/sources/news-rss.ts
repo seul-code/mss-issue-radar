@@ -1,6 +1,7 @@
 // Design Ref: §2 입력 ⓒ — 언론사 RSS 수집기 (무료, 키 없음). AI 웹 검색을 대신한다.
 // AI 웹 검색은 정부 누리집이나 몇 년 전 기사만 찾아 최신 언론 기사가 0건이었다 (2026-10-12 실제 점검).
 // 화면에는 제목·원문 링크와 AI가 쓴 사실 요약만 쓰고, RSS 본문은 AI 판단에만 쓴다 (PRD 7장 저작권).
+import { timeoutSignal } from "@/lib/abort";
 import { DETAIL_MAX, EXCERPT_MAX } from "@/lib/sources/preprocess";
 import { decodeEntities, readTag, stripContacts, toPlainText } from "@/lib/sources/xml";
 import type { RawItem } from "@/lib/types";
@@ -77,10 +78,10 @@ export function parseNewsRss(xml: string, publisher: string): RawItem[] {
  * 언론사 RSS를 모두 받는다. 한 곳이 실패해도 나머지는 쓰고, 실패 이유만 돌려준다.
  * 모두 실패하면 오류를 던진다 (호출한 쪽이 출처 오류로 기록하고 계속 진행).
  */
-export async function fetchNewsRss(): Promise<{ items: RawItem[]; errors: string[] }> {
+export async function fetchNewsRss(signal?: AbortSignal): Promise<{ items: RawItem[]; errors: string[] }> {
   const results = await Promise.allSettled(
     NEWS_FEEDS.map(async (feed) => {
-      const res = await fetch(feed.url, { cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) });
+      const res = await fetch(feed.url, { cache: "no-store", signal: timeoutSignal(TIMEOUT_MS, signal) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return parseNewsRss(await res.text(), feed.publisher);
     }),

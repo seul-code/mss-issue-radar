@@ -1,6 +1,7 @@
 // Design Ref: §2 처리 3-1 — 중기부 보도자료 본문 읽기 (PRD 6장: 정부 보도자료만 예외적으로 본문을 읽는다).
 // 중기부 RSS에는 본문이 없어 제목만으로는 세부 요약을 쓸 수 없다. 최종 후보로 뽑힌 중기부 자료만 원문 페이지를 읽는다.
 // 안전장치: 중기부 보도자료 주소만 허용 · 15초 제한 · 글자만 꺼냄 · 연락처 제거 · 1,500자만 AI에 보냄 · 저장·표시 안 함.
+import { timeoutSignal } from "@/lib/abort";
 import { DETAIL_MAX } from "@/lib/sources/preprocess";
 import { decodeEntities, stripContacts, toPlainText } from "@/lib/sources/xml";
 
@@ -36,10 +37,10 @@ export function extractMssBody(html: string): string | undefined {
 }
 
 /** 보도자료 본문을 읽는다. 허용되지 않은 주소이거나 실패하면 undefined (제목만으로 계속 진행). */
-export async function fetchMssDetail(url: string): Promise<string | undefined> {
+export async function fetchMssDetail(url: string, signal?: AbortSignal): Promise<string | undefined> {
   if (!isMssPressUrl(url)) return undefined;
   try {
-    const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS), redirect: "error" });
+    const res = await fetch(url, { cache: "no-store", signal: timeoutSignal(TIMEOUT_MS, signal), redirect: "error" });
     if (!res.ok) return undefined;
     return extractMssBody(await res.text());
   } catch {

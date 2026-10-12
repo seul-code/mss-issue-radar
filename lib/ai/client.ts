@@ -1,10 +1,14 @@
 // Design Ref: §3 — OpenAI Responses API 호출 창구. SDK 없이 기본 fetch로 부른다 (하루 2~3회뿐이라 충분).
 // CLAUDE.md 2장: 개발 중 실제 호출 금지 → AI_MODE=live 일 때만 실제로 부르고, 그 외에는 가짜 응답을 돌려준다.
 // 이 파일은 서버에서만 쓴다. 화면 조각(components/)에서 import하지 않는다.
+import { timeoutSignal } from "@/lib/abort";
 
 const OPENAI_URL = "https://api.openai.com/v1/responses";
-/** 한 번 호출의 최대 대기 시간. 자동 실행 전체 제한(300초) 안에 여러 번 부를 수 있게 잡는다. */
-const TIMEOUT_MS = 120_000;
+/**
+ * 한 번 호출의 기본 최대 대기 시간. 실제로는 자동 실행 전체 시간 예산(lib/pipeline.ts)의 남은 시간과
+ * 둘 중 먼저 끝나는 쪽에서 멈춘다.
+ */
+const DEFAULT_TIMEOUT_MS = 120_000;
 
 export type AiMode = "mock" | "live";
 /** light = 저가 모델(1차 선별), main = 상위 모델(최종 분석) — Design §2 */
@@ -81,8 +85,16 @@ function extractText(body: ResponsesApiBody): string {
     .join("");
 }
 
+export interface CallOptions {
+  /** 자동 실행 전체의 취소 신호. 시간 예산이 끝나면 대기 중인 호출도 멈춘다. */
+  signal?: AbortSignal;
+  /** 이 호출 하나의 최대 대기 시간 */
+  timeoutMs?: number;
+}
+
 /** OpenAI를 한 번 부른다. 실패하면 오류를 던지고, 실패 기록은 자동 실행 쪽이 남긴다. */
-export async function callAi<T>(req: AiRequest<T>): Promise<AiResult<T>> {
+export async function callAi<T>(req: AiRequest<T>, options: CallOptions = {}): Promise<AiResult<T>> {
+  options.signal?.throwIfAborted();
   if (getAiMode() === "mock") {
     return { data: req.mock(), mode: "mock", usage: { inputTokens: 0, outputTokens: 0 } };
   }
@@ -90,7 +102,7 @@ export async function callAi<T>(req: AiRequest<T>): Promise<AiResult<T>> {
   const res = await fetch(OPENAI_URL, {
     method: "POST",
     cache: "no-store",
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: timeoutSignal(options.timeoutMs ?? DEFAULT_TIMEOUT_MS, options.signal),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,

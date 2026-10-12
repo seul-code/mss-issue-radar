@@ -7,12 +7,28 @@ export function readTag(block: string, tag: string): string | undefined {
   return value || undefined;
 }
 
+/**
+ * 숫자 문자 표기(&#…;)를 글자로 바꾼다. 글자로 쓸 수 없는 값은 빈 문자열로 버린다 — 오류를 던지면 출처 전체가 실패한다.
+ * 버리는 값: 범위 밖(0x10FFFF 초과), 짝 없는 대리 문자(D800~DFFF), 탭·줄바꿈을 뺀 제어 문자, 글자가 아닌 FFFE·FFFF
+ */
+function fromCodePointSafe(code: number): string {
+  const invalid =
+    !Number.isInteger(code) ||
+    code > 0x10ffff ||
+    (code >= 0xd800 && code <= 0xdfff) ||
+    (code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) ||
+    (code >= 0x7f && code <= 0x9f) ||
+    code === 0xfffe ||
+    code === 0xffff;
+  return invalid ? "" : String.fromCodePoint(code);
+}
+
 /** 자주 나오는 HTML 문자 표기를 글자로 바꾼다 (&middot; → · 등) */
 export function decodeEntities(text: string): string {
   const named: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", middot: "·", hellip: "…", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", rarr: "→", larr: "←", uarr: "↑", darr: "↓", sim: "~", bull: "•", times: "×", ndash: "–", mdash: "—" };
   return text
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&#(\d+);/g, (_, n: string) => (n.length > 7 ? "" : fromCodePointSafe(Number(n))))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => (n.length > 6 ? "" : fromCodePointSafe(parseInt(n, 16))))
     .replace(/&([a-z]+);/gi, (whole, name) => named[name.toLowerCase()] ?? whole);
 }
 
