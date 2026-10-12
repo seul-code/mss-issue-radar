@@ -2,7 +2,7 @@
 // CLAUDE.md 2장: 개발 중 실제 호출 금지 → AI_MODE=live 일 때만 실제로 부르고, 그 외에는 가짜 응답을 돌려준다.
 // 이 파일은 서버에서만 쓴다. 화면 조각(components/)에서 import하지 않는다.
 import { timeoutSignal } from "@/lib/abort";
-import { readTextLimited, ResponseTooLargeError } from "@/lib/http";
+import { readTextLimited } from "@/lib/http";
 
 const OPENAI_URL = "https://api.openai.com/v1/responses";
 /**
@@ -29,12 +29,12 @@ export function getAiMode(): AiMode {
   const isProduction = process.env.VERCEL_ENV === "production";
 
   if (isProduction && !live) {
-    throw new AiConfigError("배포 환경인데 AI_MODE=live 가 설정되지 않았습니다");
+    throw new AiConfigError("설정 오류: AI_MODE=live 없음 (배포 환경)");
   }
   if (live) {
     const missing = ["OPENAI_API_KEY", "OPENAI_MODEL", "OPENAI_LIGHT_MODEL"].filter((name) => !process.env[name]);
     if (missing.length > 0) {
-      throw new AiConfigError(`AI_MODE=live 인데 환경변수가 없습니다: ${missing.join(", ")}`);
+      throw new AiConfigError(`설정 오류: ${missing.join(", ")} 없음`);
     }
   }
   return live ? "live" : "mock";
@@ -55,6 +55,11 @@ export interface AiRequest<T> {
   input: string;
   /** 응답 양식 (JSON Schema). 이 양식대로만 답하게 한다 — 구조화 출력 */
   schema: { name: string; schema: Record<string, unknown> };
+  /**
+   * 출력 토큰 상한 (Responses API max_output_tokens, 추론 토큰 포함). 근거와 값은 lib/ai/prompts.ts.
+   * 시간 제한·요청 취소는 과금되지 않음을 보장하지 않으므로, 출력량은 이 값으로 직접 묶는다.
+   */
+  maxOutputTokens: number;
   /** 가짜 모드에서 돌려줄 응답. 실제 호출 없이 개발·시험하는 데 쓴다. */
   mock: () => T;
 }
@@ -64,7 +69,7 @@ export interface AiResult<T> {
   data: T;
   mode: AiMode;
   /** 비용 확인용 사용량 (가짜 모드에서는 0) */
-  usage: { inputTokens: number; outputTokens: number };
+  usage: { inputTokens: number; outputTokens: number; reasoningTokens: number };
 }
 
 /** OpenAI 응답 본문의 최대 크기 (응답은 이슈 20건 JSON, 실측 수십 KB) */
@@ -103,7 +108,7 @@ interface ResponsesApiBody {
   error?: { code?: unknown; type?: unknown } | null;
   incomplete_details?: { reason?: string } | null;
   output?: { type: string; content?: { type: string; text?: string }[] }[];
-  usage?: { input_tokens?: number; output_tokens?: number };
+  usage?: { input_tokens?: number; output_tokens?: number; output_tokens_details?: { reasoning_tokens?: number } };
 }
 
 /** 응답의 output 목록에서 AI가 쓴 글(output_text)만 이어 붙인다. */
@@ -127,7 +132,7 @@ export interface CallOptions {
 export async function callAi<T>(req: AiRequest<T>, options: CallOptions = {}): Promise<AiResult<T>> {
   options.signal?.throwIfAborted();
   if (getAiMode() === "mock") {
-    return { data: req.mock(), mode: "mock", usage: { inputTokens: 0, outputTokens: 0 } };
+    return { data: req.mock(), mode: "mock", usage: { inputTokens: 0, outputTokens: 0, reasoningTokens: 0 } };
   }
 
   const res = await fetch(OPENAI_URL, {
@@ -143,16 +148,19 @@ export async function callAi<T>(req: AiRequest<T>, options: CallOptions = {}): P
       instructions: req.instructions,
       input: req.input,
       store: false, // 대화 기록을 OpenAI에 남기지 않는다.
+      // 단계별 출력 상한 (추론 토큰 포함). 넘으면 응답이 incomplete 로 끝나고 아래에서 실패로 처리한다 — 부분 결과는 쓰지 않는다.
+      max_output_tokens: req.maxOutputTokens,
       text: { format: { type: "json_schema", name: req.schema.name, schema: req.schema.schema, strict: true } },
     }),
   });
 
   // 응답 크기를 제한해 읽는다. 너무 크면 ResponseTooLargeError (이번 실행 실패로 기록, 직전 결과 유지).
+  // 본문을 읽다가 난 오류(크기 초과·시간 초과·연결 끊김)는 그대로 던져 실제 원인이 기록되게 하고, JSON 해석 실패만 빈 응답으로 본다.
+  const text = await readTextLimited(res, MAX_RESPONSE_BYTES, "OpenAI");
   let body: ResponsesApiBody;
   try {
-    body = JSON.parse(await readTextLimited(res, MAX_RESPONSE_BYTES, "OpenAI")) as ResponsesApiBody;
-  } catch (error) {
-    if (error instanceof ResponseTooLargeError) throw error;
+    body = JSON.parse(text) as ResponsesApiBody;
+  } catch {
     body = {};
   }
   if (!res.ok) {
@@ -176,6 +184,11 @@ export async function callAi<T>(req: AiRequest<T>, options: CallOptions = {}): P
   return {
     data,
     mode: "live",
-    usage: { inputTokens: body.usage?.input_tokens ?? 0, outputTokens: body.usage?.output_tokens ?? 0 },
+    usage: {
+      inputTokens: body.usage?.input_tokens ?? 0,
+      outputTokens: body.usage?.output_tokens ?? 0,
+      // 출력 토큰에 포함된 추론 토큰 (모델이 추론을 쓰는 경우). 출력 상한을 정할 때 참고하려고 기록한다.
+      reasoningTokens: body.usage?.output_tokens_details?.reasoning_tokens ?? 0,
+    },
   };
 }

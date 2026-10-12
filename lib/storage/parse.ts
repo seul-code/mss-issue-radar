@@ -150,6 +150,7 @@ function parseRunRecord(value: unknown): RunRecord {
   if (finishedAt) record.finishedAt = finishedAt;
   const historyError = str(value.historyError);
   if (historyError) record.historyError = historyError;
+  if (value.timedOut === true) record.timedOut = true;
   return record;
 }
 

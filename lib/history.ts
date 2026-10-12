@@ -8,6 +8,7 @@
 import { kstDay } from "@/lib/format";
 import {
   createDailyRecord,
+  getDailyRecord,
   getHistoryIndex,
   isDayString,
   saveHistoryIndexIfVersion,
@@ -56,9 +57,30 @@ export function upsertEntry(index: HistoryIndex, entry: HistoryEntry): HistoryIn
   return { ...index, entries: [...others, keep].sort((a, b) => a.date.localeCompare(b.date)) };
 }
 
-/** 성공 결과 하나를 날짜별 파일로 남긴다. 이미 있으면 그대로 두고 "exists". */
-function saveDaily(date: string, result: SuccessResult): Promise<"created" | "exists"> {
-  return createDailyRecord({ date, generatedAt: result.generatedAt, window: result.window, issues: result.issues });
+/**
+ * 성공 결과 하나를 날짜별 파일로 남기고, 날짜 목록에 넣을 줄을 돌려준다. 이미 있는 파일은 절대 덮어쓰지 않는다.
+ * "이미 있음"이면 원본을 다시 읽어 비교한다:
+ *  - 이번 결과와 같으면 → 첫 저장은 성공했는데 응답이 끊겨 SDK 재시도가 거절된 경우. 이번 저장으로 본다.
+ *  - 다르면 → 같은 날 이전 기록. 기존 파일 기준으로 줄을 만들어 목록과 파일 내용이 어긋나지 않게 한다 (existed).
+ */
+async function saveDaily(
+  date: string,
+  result: SuccessResult,
+  signal?: AbortSignal,
+): Promise<{ entry: HistoryEntry; existed: boolean }> {
+  const record = { date, generatedAt: result.generatedAt, window: result.window, issues: result.issues };
+  const mine: HistoryEntry = { date, status: "success", issueCount: result.issues.length, at: result.generatedAt };
+  if ((await createDailyRecord(record, signal)) === "created") return { entry: mine, existed: false };
+
+  const existing = await getDailyRecord(date, { fresh: true, signal });
+  if (!existing) return { entry: mine, existed: true }; // 있다는데 읽히지 않음: 기존 줄이 있으면 그대로 둔다
+  if (existing.generatedAt === record.generatedAt && existing.issues.length === record.issues.length) {
+    return { entry: mine, existed: false };
+  }
+  return {
+    entry: { date, status: "success", issueCount: existing.issues.length, at: existing.generatedAt },
+    existed: true,
+  };
 }
 
 export interface HistoryOutcome {
@@ -70,10 +92,13 @@ export interface HistoryOutcome {
 
 /**
  * 이번 실행 결과를 날짜별 기록에 반영한다.
+ * 한계 (Design §4-1): 자동 복구는 "직전 성공 결과" 한 건만 다시 시도한다. 복구까지 실패한 채 다음 성공이 오면
+ * 그 날짜의 결과는 최신 결과에서도 밀려나 다시 채울 수 없다. 강제 종료로 running 만 남은 날은 목록에 실패로 남지 않는다.
  * @param previous 이번 실행 전의 상태 (자동 복구용)
  * @param next     이번 실행 후 저장할 상태 (lastRun.status 가 success·empty·failed 중 하나)
+ * @param signal   저장 단계 시간 제한 (Blob SDK abortSignal)
  */
-export async function recordHistory(previous: RadarState, next: RadarState): Promise<HistoryOutcome> {
+export async function recordHistory(previous: RadarState, next: RadarState, signal?: AbortSignal): Promise<HistoryOutcome> {
   const run = next.lastRun;
   if (!run || run.status === "running") return { changedDates: [] };
 
@@ -90,9 +115,9 @@ export async function recordHistory(previous: RadarState, next: RadarState): Pro
   // ① 날짜별 파일 — 이번에 성공했으면 오늘 날짜로 저장
   if (run.status === "success" && next.lastSuccess) {
     try {
-      const saved = await saveDaily(runDate, next.lastSuccess);
+      const { entry, existed } = await saveDaily(runDate, next.lastSuccess, signal);
       // 파일이 이미 있었다면(같은 날 다시 실행) 파일은 그대로이므로 목록의 기존 줄도 그대로 둔다.
-      queue({ date: runDate, status: "success", issueCount: next.lastSuccess.issues.length, at: run.at }, saved === "exists");
+      queue(entry, existed);
     } catch (error) {
       // 날짜 목록에는 넣지 않는다 → 다음 성공 실행이 자동 복구로 다시 시도한다.
       errors.push(`날짜별 파일 저장 실패(${runDate}): ${message(error)}`);
@@ -110,21 +135,17 @@ export async function recordHistory(previous: RadarState, next: RadarState): Pro
   // ② 날짜 목록 — 연도별로 읽고 고쳐 쓴다 (읽기에 실패하면 쓰지 않는다)
   for (const [year, entries] of pending) {
     try {
-      const { index, version } = await getHistoryIndex(year);
+      const { index, version } = await getHistoryIndex(year, signal);
       let updated = index;
 
       if (year === healYear && prevSuccess && prevDate) {
         const recorded = index.entries.find((e) => e.date === prevDate && e.status === "success");
         if (!recorded) {
-          // 복구 실패는 그 날짜에만 영향을 준다 — 오늘 줄은 아래에서 그대로 저장한다. 다음 성공 실행이 다시 시도한다.
+          // 복구 실패는 그 날짜에만 영향을 준다 — 오늘 줄은 아래에서 그대로 저장한다.
+          // 다시 시도는 이 결과가 "직전 성공"으로 남아 있는 동안(다음 실행 1회)만 가능하다.
           try {
-            await saveDaily(prevDate, prevSuccess);
-            updated = upsertEntry(updated, {
-              date: prevDate,
-              status: "success",
-              issueCount: prevSuccess.issues.length,
-              at: prevSuccess.generatedAt,
-            });
+            const { entry } = await saveDaily(prevDate, prevSuccess, signal);
+            updated = upsertEntry(updated, entry);
             changedDates.add(prevDate);
           } catch (error) {
             errors.push(`이전 날짜 복구 실패(${prevDate}): ${message(error)}`);
@@ -136,7 +157,17 @@ export async function recordHistory(previous: RadarState, next: RadarState): Pro
         if (!(keepExisting && hasSuccess)) updated = upsertEntry(updated, entry);
       }
 
-      if (updated !== index) await saveHistoryIndexIfVersion(updated, version);
+      if (updated !== index) {
+        try {
+          await saveHistoryIndexIfVersion(updated, version, signal);
+        } catch (error) {
+          // 412·연결 오류여도 첫 저장이 성공하고 응답만 끊겼을 수 있다: 다시 읽어 쓰려던 목록과 같으면 저장된 것으로 본다.
+          // 다르면 다른 실행이 바꾼 것이므로 덮어쓰지 않고 오류로 남긴다.
+          if (signal?.aborted) throw error;
+          const again = await getHistoryIndex(year, signal);
+          if (JSON.stringify(again.index.entries) !== JSON.stringify(updated.entries)) throw error;
+        }
+      }
     } catch (error) {
       errors.push(`날짜 목록 저장 실패(${year}): ${message(error)}`);
     }

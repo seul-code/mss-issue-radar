@@ -71,13 +71,15 @@ export interface PipelineResult {
     expansionSkipped: boolean;
     /** 48시간 확장 호출이 실패해 24시간 결과로 진행한 경우 그 이유 */
     expansionError?: string;
+    /** 최종 분석이 올바른 빈 목록을 돌려줘 0건으로 처리했는지 */
+    analysisEmpty?: boolean;
     collected: { mss: number; policyNews: number; news: number };
     /** 실패한 출처와 이유 (키 값은 포함되지 않음) */
     sourceErrors: string[];
     candidates: number;
     dropped: number;
     aiCalls: number;
-    usage: { inputTokens: number; outputTokens: number };
+    usage: { inputTokens: number; outputTokens: number; reasoningTokens: number };
     /** 이슈는 남겼지만 경고를 붙인 수 (판단 근거 없음, 원문에서 찾지 못한 수치가 있는 요약 줄) */
     warnings?: { missingReason: number; unverifiedNumberLines: number };
     /** 점검 지표: 높음 비율과 기준(1/3) 초과 여부 */
@@ -125,12 +127,13 @@ export async function runDailyPipeline(
   assertProductionConfig();
   /** 마감까지 남은 시간(ms). 시간 예산이 없으면 무한대 */
   const remaining = () => (deadlineAt === undefined ? Infinity : deadlineAt - Date.now());
-  const usage = { inputTokens: 0, outputTokens: 0 };
+  const usage = { inputTokens: 0, outputTokens: 0, reasoningTokens: 0 };
   let aiCalls = 0;
-  const addUsage = (u: { inputTokens: number; outputTokens: number }) => {
+  const addUsage = (u: { inputTokens: number; outputTokens: number; reasoningTokens: number }) => {
     aiCalls += 1;
     usage.inputTokens += u.inputTokens;
     usage.outputTokens += u.outputTokens;
+    usage.reasoningTokens += u.reasoningTokens;
   };
 
   // ── 1. 수집: 정부 자료 2곳 + 언론사 RSS를 동시에 (모두 무료, AI 호출 없음). 한 곳이 실패해도 계속 간다.
@@ -234,11 +237,21 @@ export async function runDailyPipeline(
   }
   const analysis = await callAi(buildAnalysisRequest(candidates), { signal, timeoutMs: analysisTimeoutMs });
   addUsage(analysis.usage);
-  const { issues, dropped, warnings } = analysisToIssues(candidates, analysis.data);
 
-  // Design §5: AI 응답이 전부 규칙에 어긋나면 실패로 처리한다.
+  // 최종 분석 0건 처리 (Design §5):
+  //  - 응답 형식이 잘못됨(issues 목록 없음) → 실패
+  //  - 올바른 응답의 issues 가 빈 목록 → AI가 본문을 읽고 모두 관련 없다고 판단한 것 → 정상 0건 (PRD 5장 "새 이슈 없음")
+  //  - 답은 있는데 전부 검증에서 탈락 → 실패 (규칙에 어긋난 답을 0건으로 숨기지 않는다)
+  const answered: unknown = (analysis.data as { issues?: unknown } | null)?.issues;
+  if (!Array.isArray(answered)) {
+    throw new Error("분석 응답 형식이 맞지 않습니다 (issues 목록 없음)");
+  }
+  if (answered.length === 0) {
+    return { status: "empty", issues: [], window, stats: { ...stats, aiCalls, analysisEmpty: true } };
+  }
+  const { issues, dropped, warnings } = analysisToIssues(candidates, analysis.data);
   if (issues.length === 0) {
-    throw new Error(`분석 응답을 하나도 쓸 수 없습니다 (후보 ${screening.candidates.length}건, 버림 ${dropped}건)`);
+    throw new Error(`분석 답변 ${answered.length}건이 모두 검증에서 탈락했습니다 (후보 ${screening.candidates.length}건, 버림 ${dropped}건)`);
   }
 
   const highRatio = issues.filter((issue) => issue.importance === "high").length / issues.length;

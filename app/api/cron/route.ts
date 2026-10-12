@@ -1,5 +1,5 @@
 // Design Ref: §2.2 자동 실행 주소 — Vercel Cron이 하루 1회 부른다.
-// 비밀번호 확인 → 실행권 얻기(조건부 저장) → 시간 예산 안에서 실행 → 날짜별 기록 보관 → 최신 결과 저장.
+// 비밀번호 확인 → 실행권 얻기(조건부 저장) → 시간 예산 안에서 실행 → 날짜별 기록 보관 → 최신 결과 저장 → 화면 갱신.
 // 실패해도 직전 성공 결과는 지키고 실패만 기록한다 (Design §5).
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { revalidatePath } from "next/cache";
@@ -7,7 +7,7 @@ import { getAiMode } from "@/lib/ai/client";
 import { kstDay } from "@/lib/format";
 import { recordHistory } from "@/lib/history";
 import { runDailyPipeline } from "@/lib/pipeline";
-import { getStorageKind, getVersionedState, saveStateIfVersion, StateConflictError } from "@/lib/storage";
+import { getStorageKind, getVersionedState, saveStateChecked } from "@/lib/storage";
 import type { RadarState, RunRecord } from "@/lib/types";
 
 /** OpenAI 응답을 기다리는 시간을 포함해 최대 300초 (Vercel 무료 플랜 최대값) */
@@ -15,9 +15,16 @@ export const maxDuration = 300;
 
 /**
  * 파이프라인 시간 예산: 요청 시작부터 255초. 남은 약 45초는 상태 읽기·실행권 저장(앞)과
- * 결과·실패 기록 저장(뒤)에 쓴다 — 시간 초과로 함수가 강제 종료돼 실패 기록조차 못 남기는 일을 막는다.
+ * 결과·실패 기록 저장(뒤)에 쓴다 — 시간 초과로 함수가 강제 종료돼 실패 기록조차 못 남기는 일을 줄인다.
  */
 const PIPELINE_BUDGET_MS = 255_000;
+
+/**
+ * 저장소 작업(읽기·저장) 시간 제한: 요청 시작부터 290초. Blob SDK 의 abortSignal 로 넘긴다.
+ * 보장 범위: SDK 는 쓰기를 기본 최대 10회 다시 시도하고, 재시도 사이 대기 중에는 취소가 다음 시도 때 반영된다.
+ * 그래서 290초 안에 끝난다고 보장할 수는 없고, 300초에 강제 종료되면 running 기록이 남을 수 있다 (화면은 "중간에 멈췄습니다").
+ */
+const STORAGE_LIMIT_MS = 290_000;
 
 /** running 기록이 이 시간을 넘기면 강제 종료된 것으로 본다 (함수 최대 시간 + 여유 1분) */
 const LEASE_MS = (maxDuration + 60) * 1000;
@@ -49,22 +56,8 @@ function errorMessage(error: unknown, budgetSignal: AbortSignal): string {
   return (error instanceof Error ? `${error.name}: ${error.message}` : String(error)).slice(0, MAX_ERROR_LENGTH);
 }
 
-/**
- * 하루 1회 실행권을 얻는다: 읽었던 버전 그대로일 때만 running 기록을 저장한다 (Blob ifMatch).
- * 서버가 여러 대여도 같은 버전에 대한 저장은 하나만 성공하므로, 동시에 부른 요청 중 하나만 실행한다.
- * 성공하면 새 버전, 다른 실행이 먼저 얻었으면 null.
- */
-async function claimRun(previous: RadarState, version: string | null, run: RunRecord): Promise<string | null> {
-  try {
-    return await saveStateIfVersion({ lastSuccess: previous.lastSuccess, lastRun: run }, version);
-  } catch (error) {
-    if (error instanceof StateConflictError) return null;
-    // 저장 응답만 못 받은 경우일 수 있다: 다시 읽어 내 기록이 들어갔는지 확인한다.
-    const current = await getVersionedState();
-    if (current.state.lastRun?.runId === run.runId) return current.version;
-    if (current.version !== version) return null;
-    throw error;
-  }
+function logError(label: string, error: unknown) {
+  console.error(label, error instanceof Error ? `${error.name}: ${error.message}` : error);
 }
 
 export async function GET(request: Request) {
@@ -77,6 +70,7 @@ export async function GET(request: Request) {
   const startedAt = Date.now();
   const now = new Date(startedAt);
   const budgetSignal = AbortSignal.timeout(PIPELINE_BUDGET_MS);
+  const storageSignal = AbortSignal.timeout(STORAGE_LIMIT_MS);
 
   // 시험 데이터 차단 (Design §9): 운영 저장소(Blob)에는 실제 AI 결과만 저장한다. 저장소를 읽거나 쓰기 전에 확인한다.
   // 저장소 종류는 실행 환경(VERCEL_ENV)으로 정해지므로, 로컬·preview 에서는 AI_MODE 와 관계없이 운영 기록에 닿지 않는다.
@@ -90,7 +84,7 @@ export async function GET(request: Request) {
   try {
     storageKind = getStorageKind();
   } catch (error) {
-    console.error("[cron] 저장소 설정 오류", error instanceof Error ? error.message : error);
+    logError("[cron] 저장소 설정 오류", error);
     return Response.json({ status: "error", error: "저장소 설정이 잘못돼 실행하지 않았습니다" }, { status: 500 });
   }
   if (storageKind === "blob" && mode === "mock") {
@@ -102,9 +96,9 @@ export async function GET(request: Request) {
   let previous: RadarState;
   let version: string | null;
   try {
-    ({ state: previous, version } = await getVersionedState());
+    ({ state: previous, version } = await getVersionedState(storageSignal));
   } catch (error) {
-    console.error("[cron] 저장소 읽기 실패", error instanceof Error ? `${error.name}: ${error.message}` : error);
+    logError("[cron] 저장소 읽기 실패", error);
     return Response.json({ status: "error", error: "저장소를 읽지 못해 실행하지 않았습니다" }, { status: 500 });
   }
 
@@ -120,25 +114,31 @@ export async function GET(request: Request) {
     return Response.json({ status: "skipped", reason: "오늘 이미 실행했습니다", lastRunAt: last.at });
   }
 
-  // 실행권 얻기 — 이 저장이 성공한 요청만 수집·AI 호출로 넘어간다.
+  // 실행권 얻기 — 읽었던 버전 그대로일 때만 running 기록을 저장한다 (Blob ifMatch). 이 저장이 성공한 요청만 수집·AI 호출로 넘어간다.
+  // 412·연결 오류가 나도 바로 "충돌"로 보지 않고 다시 읽어, 저장된 running 기록의 실행 식별값(runId)이 내 것이면 실행권을 얻은 것으로 본다.
   const runId = randomUUID();
   const at = now.toISOString();
-  let claimVersion: string | null;
-  try {
-    claimVersion = await claimRun(previous, version, {
-      at,
-      status: "running",
-      issueCount: 0,
-      runId,
-      leaseUntil: new Date(startedAt + LEASE_MS).toISOString(),
-    });
-  } catch (error) {
-    console.error("[cron] 실행권 저장 실패", error instanceof Error ? `${error.name}: ${error.message}` : error);
-    return Response.json({ status: "error", error: "실행권을 저장하지 못해 실행하지 않았습니다" }, { status: 500 });
-  }
-  if (claimVersion === null) {
+  const claimRecord: RunRecord = {
+    at,
+    status: "running",
+    issueCount: 0,
+    runId,
+    leaseUntil: new Date(startedAt + LEASE_MS).toISOString(),
+  };
+  const claim = await saveStateChecked(
+    { lastSuccess: previous.lastSuccess, lastRun: claimRecord },
+    version,
+    (current) => current.lastRun?.runId === runId && current.lastRun.status === "running",
+    storageSignal,
+  );
+  if (claim.result === "conflict") {
     return Response.json({ status: "skipped", reason: "다른 실행이 먼저 시작했습니다" });
   }
+  if (claim.result === "failed") {
+    logError(`[cron] 실행권 저장 실패${claim.uncertain ? " (저장 여부 확인 못 함)" : ""}`, claim.error);
+    return Response.json({ status: "error", error: "실행권을 저장하지 못해 실행하지 않았습니다" }, { status: 500 });
+  }
+  const claimVersion = claim.version;
 
   let next: RadarState;
   let body: Record<string, unknown>;
@@ -156,11 +156,20 @@ export async function GET(request: Request) {
     console.log("[cron] 완료", JSON.stringify(body));
   } catch (error) {
     const message = errorMessage(error, budgetSignal);
+    const timedOut = budgetSignal.aborted;
     next = {
       lastSuccess: previous.lastSuccess,
-      lastRun: { at, status: "failed", issueCount: 0, error: message, runId, finishedAt: new Date().toISOString() },
+      lastRun: {
+        at,
+        status: "failed",
+        issueCount: 0,
+        error: message,
+        runId,
+        finishedAt: new Date().toISOString(),
+        ...(timedOut ? { timedOut: true } : {}),
+      },
     };
-    body = { status: "failed", error: message };
+    body = { status: "failed", error: message, ...(timedOut ? { timedOut: true } : {}) };
     console.error("[cron] 실패", message);
   }
 
@@ -168,7 +177,7 @@ export async function GET(request: Request) {
   let historyError: string | undefined;
   let changedDates = [kstDay(now)];
   try {
-    ({ error: historyError, changedDates } = await recordHistory(previous, next));
+    ({ error: historyError, changedDates } = await recordHistory(previous, next, storageSignal));
   } catch (error) {
     historyError = `날짜별 기록 보관 실패: ${error instanceof Error ? error.message : String(error)}`.slice(0, MAX_ERROR_LENGTH);
   }
@@ -178,17 +187,28 @@ export async function GET(request: Request) {
     console.error("[cron] 날짜별 기록 보관 일부 실패", historyError);
   }
 
-  // ③ 최신 결과 — 실행권을 얻을 때의 버전 그대로일 때만 저장한다. 그 사이 누가 바꿨다면 덮어쓰지 않는다.
-  try {
-    await saveStateIfVersion(next, claimVersion);
-  } catch (error) {
-    console.error("[cron] 저장 실패", error instanceof Error ? `${error.name}: ${error.message}` : error);
-    return Response.json({ ...body, saved: false }, { status: 500 });
-  }
+  // ③ 최신 결과 — 실행권을 얻을 때의 버전 그대로일 때만 저장한다. 그 사이 다른 실행이 바꿨다면 덮어쓰지 않는다.
+  // 412·연결 오류여도 다시 읽어 내 결과(runId·상태·끝난 시각)가 들어가 있으면 저장된 것으로 본다.
+  const expected = next.lastRun;
+  const saved = await saveStateChecked(
+    next,
+    claimVersion,
+    (current) =>
+      current.lastRun?.runId === runId &&
+      current.lastRun.status === expected?.status &&
+      current.lastRun.finishedAt === expected?.finishedAt,
+    storageSignal,
+  );
 
-  // 저장이 끝났으니 대시보드와 내용이 바뀐 날짜 화면(오늘 + 복구한 날짜)을 새로 만들도록 신호를 보낸다.
-  // 날짜 화면은 이 신호가 올 때만 다시 만들어진다 (방문자는 저장된 결과만 읽는다).
+  // 화면 갱신: ①② 에서 바뀐 날짜 화면(오늘 + 복구한 날짜)과 대시보드(최근 기록 칩)는 ③ 결과와 관계없이 다시 만든다.
+  // ③ 이 실패해도 이미 저장된 날짜 기록의 화면 갱신을 막지 않는다 (방문자는 저장된 결과만 읽는다).
   revalidatePath("/");
   for (const date of changedDates) revalidatePath(`/d/${date}`);
+
+  if (saved.result !== "saved") {
+    if (saved.result === "conflict") console.error("[cron] 최신 결과 저장 안 함 — 다른 실행이 먼저 바꿈 (덮어쓰지 않음)");
+    else logError(`[cron] 최신 결과 저장 실패${saved.uncertain ? " (저장 여부 확인 못 함)" : ""}`, saved.error);
+    return Response.json({ ...body, saved: false, saveResult: saved.result }, { status: 500 });
+  }
   return Response.json({ ...body, saved: true }, { status: body.status === "failed" ? 500 : 200 });
 }

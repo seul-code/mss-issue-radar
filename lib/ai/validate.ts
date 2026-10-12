@@ -4,6 +4,7 @@ import { buildDetail, checkSummary, toSourceRef } from "@/lib/ai/evidence";
 import { NO_EVIDENCE_TEXT, type AnalysisResponse, type ScreeningResponse } from "@/lib/ai/prompts";
 import { CATEGORIES } from "@/lib/categories";
 import { isGovernment } from "@/lib/sources/preprocess";
+import { EMAIL_PATTERN, PHONE_PATTERN } from "@/lib/sources/xml";
 import type { Category, Importance, Issue, RawItem } from "@/lib/types";
 
 /** PRD 5장: 하루 이슈는 최대 20개 */
@@ -93,9 +94,8 @@ const VALID_IMPORTANCE = new Set<string>(["high", "medium", "low"]);
  * 이름은 공인·기관명과 구분할 수 없어 지시문으로만 막는다.
  */
 function scrubContacts(text: string): string {
-  return text
-    .replace(/\b0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}\b/g, "[연락처 삭제]")
-    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[연락처 삭제]");
+  // 수집 단계(lib/sources/xml.ts stripContacts)와 같은 규칙을 쓴다.
+  return text.replace(PHONE_PATTERN, "[연락처 삭제]").replace(EMAIL_PATTERN, "[연락처 삭제]");
 }
 
 /** 앞뒤 공백을 정리하고 연락처를 지운 문장. 비어 있으면 undefined. */

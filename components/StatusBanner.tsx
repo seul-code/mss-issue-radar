@@ -55,6 +55,11 @@ export default function StatusBanner({ state, now, unreadable }: Props) {
     tone = "warning";
     icon = "⏰";
     message = `오늘 업데이트가 아직 실행되지 않았습니다 (마지막 실행: ${lastRun ? formatKst(lastRun.at) : "없음"})${showing}`;
+  } else if (lastRun?.status === "failed" && lastRun.timedOut) {
+    // PRD 5장: 시간 초과로 중간에 멈춘 경우 — 실패 기록은 저장됐지만 안내는 "중간에 멈췄습니다"로 한다.
+    tone = "warning";
+    icon = "⚠️";
+    message = `업데이트가 중간에 멈췄습니다 (시작: ${formatKst(lastRun.at)})${showing}`;
   } else if (lastRun?.status === "failed") {
     // PRD 5장: 자동 처리 실패 시 직전 결과를 그대로 두고 마지막 성공 시각을 알린다.
     tone = "warning";

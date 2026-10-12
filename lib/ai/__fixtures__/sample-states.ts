@@ -245,3 +245,15 @@ export const noneState: RadarState = {
   lastSuccess: null,
   lastRun: null,
 };
+
+/** 시간 초과: 시간 예산(255초)을 넘겨 실패로 기록된 상태 — PRD 5장대로 "중간에 멈췄습니다"로 안내 */
+export const timedOutState: RadarState = {
+  lastSuccess: { issues: sampleIssues, generatedAt: "2026-10-05T22:08:00Z" },
+  lastRun: {
+    at: "2026-10-06T22:09:00Z",
+    status: "failed",
+    issueCount: 0,
+    error: "시간 예산(255초) 초과로 중단했습니다",
+    timedOut: true,
+  },
+};

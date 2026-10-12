@@ -43,13 +43,20 @@ export class MemoryAlreadyExistsError extends Error {
   name = "MemoryAlreadyExistsError";
 }
 
-export async function readMemoryJson(pathname: string): Promise<{ data: unknown; version: string } | null> {
+export async function readMemoryJson(pathname: string, signal?: AbortSignal): Promise<{ data: unknown; version: string } | null> {
+  signal?.throwIfAborted(); // Blob 과 같이 취소 신호를 따른다 (시험에서 저장 시간 초과를 흉내 낼 때 쓴다)
   const entry = files().get(pathname);
   return entry ? { data: JSON.parse(entry.json), version: String(entry.version) } : null;
 }
 
 /** 버전이 같을 때만 쓴다 (null = 파일이 없을 때만). 읽기와 비교·쓰기 사이에 await가 없어 한 프로세스 안에서는 원자적이다. */
-export async function writeMemoryJsonIfVersion(pathname: string, json: string, version: string | null): Promise<string> {
+export async function writeMemoryJsonIfVersion(
+  pathname: string,
+  json: string,
+  version: string | null,
+  signal?: AbortSignal,
+): Promise<string> {
+  signal?.throwIfAborted();
   const map = files();
   const current = map.get(pathname);
   if ((current ? String(current.version) : null) !== version) {
@@ -61,7 +68,8 @@ export async function writeMemoryJsonIfVersion(pathname: string, json: string, v
 }
 
 /** 파일이 없을 때만 새로 만든다 (덮어쓰기 금지). */
-export async function createMemoryJson(pathname: string, json: string): Promise<void> {
+export async function createMemoryJson(pathname: string, json: string, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
   const map = files();
   if (map.has(pathname)) throw new MemoryAlreadyExistsError("이미 같은 날짜의 기록이 있습니다");
   map.set(pathname, { json, version: 1 });

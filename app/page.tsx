@@ -13,6 +13,7 @@ import {
   normalState,
   STALE_NOW,
   staleState,
+  timedOutState,
 } from "@/lib/ai/__fixtures__/sample-states";
 import liveSample from "@/lib/ai/__fixtures__/live-sample.json";
 import { kstDay } from "@/lib/format";
@@ -33,7 +34,7 @@ function shortlyAfter(iso: string): number {
   return Date.parse(iso) + 2 * 3600_000;
 }
 
-// Design Ref: §7 — 개발 모드에서만 ?demo=normal|empty|failed|none|stale|interrupted|live 로 샘플 상태를 바꿔 본다.
+// Design Ref: §7 — 개발 모드에서만 ?demo=normal|empty|failed|none|stale|interrupted|timeout|live 로 샘플 상태를 바꿔 본다.
 // live = 2026-10-12 실제 AI 1회 실행 결과 (AI를 다시 부르지 않고 화면을 확인하기 위한 저장본)
 const DEMO_STATES: Record<string, { state: RadarState; now: number }> = {
   normal: { state: normalState, now: shortlyAfter(normalState.lastRun!.at) },
@@ -42,6 +43,7 @@ const DEMO_STATES: Record<string, { state: RadarState; now: number }> = {
   none: { state: noneState, now: Date.parse("2026-10-07T01:00:00Z") },
   stale: { state: staleState, now: Date.parse(STALE_NOW) },
   interrupted: { state: interruptedState, now: shortlyAfter(interruptedState.lastRun!.at) },
+  timeout: { state: timedOutState, now: shortlyAfter(timedOutState.lastRun!.at) },
   live: { state: parseRadarState(liveSample), now: shortlyAfter(liveSample.lastRun.at) },
 };
 

@@ -22,8 +22,12 @@ export class BlobAlreadyExistsError extends Error {
  * fresh = true 면 CDN 캐시를 거치지 않고 원본에서 읽는다 (바뀌는 파일: state·날짜 목록).
  * 날짜별 결과처럼 바뀌지 않는 파일은 캐시를 써서 읽기 작업 수를 아낀다.
  */
-export async function readBlobJson(pathname: string, fresh: boolean): Promise<{ data: unknown; version: string } | null> {
-  const result = await get(pathname, { access: "private", useCache: !fresh });
+export async function readBlobJson(
+  pathname: string,
+  fresh: boolean,
+  signal?: AbortSignal,
+): Promise<{ data: unknown; version: string } | null> {
+  const result = await get(pathname, { access: "private", useCache: !fresh, abortSignal: signal });
   if (!result || result.statusCode !== 200) return null;
   return { data: await new Response(result.stream).json(), version: result.blob.etag };
 }
@@ -32,29 +36,37 @@ export async function readBlobJson(pathname: string, fresh: boolean): Promise<{ 
  * 조건부로 덮어쓴다. version이 있으면 그 버전일 때만(ifMatch), null이면 파일이 아직 없을 때만 쓴다.
  * 다른 실행이 먼저 바꿨으면 BlobVersionConflictError. 성공하면 새 버전(etag)을 돌려준다.
  */
-export async function writeBlobJsonIfVersion(pathname: string, json: string, version: string | null): Promise<string> {
+export async function writeBlobJsonIfVersion(
+  pathname: string,
+  json: string,
+  version: string | null,
+  signal?: AbortSignal,
+): Promise<string> {
   try {
     const result = await put(pathname, json, {
       access: "private",
       addRandomSuffix: false,
       contentType: "application/json",
       ...(version ? { ifMatch: version } : { allowOverwrite: false }),
+      abortSignal: signal,
     });
     return result.etag;
   } catch (error) {
-    if (error instanceof BlobPreconditionFailedError) throw new BlobVersionConflictError("다른 실행이 먼저 저장했습니다");
+    // 412: 다른 실행이 먼저 바꿨거나, 내 첫 저장이 성공했는데 응답이 끊겨 SDK 재시도가 거절된 경우 (호출한 쪽이 다시 읽어 확인)
+    if (error instanceof BlobPreconditionFailedError) throw new BlobVersionConflictError("조건부 저장이 거절됐습니다 (버전 불일치)");
     throw error;
   }
 }
 
 /** 파일이 없을 때만 새로 만든다 (덮어쓰기 금지). 이미 있으면 BlobAlreadyExistsError. */
-export async function createBlobJson(pathname: string, json: string): Promise<void> {
+export async function createBlobJson(pathname: string, json: string, signal?: AbortSignal): Promise<void> {
   try {
     await put(pathname, json, {
       access: "private",
       addRandomSuffix: false,
       allowOverwrite: false,
       contentType: "application/json",
+      abortSignal: signal,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";

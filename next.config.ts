@@ -15,6 +15,8 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
+  // 응답에 "X-Powered-By: Next.js" 를 붙이지 않는다 (프레임워크 정보 노출 줄이기)
+  poweredByHeader: false,
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },
