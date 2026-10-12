@@ -9,6 +9,7 @@ import {
   noneState,
   normalState,
 } from "@/lib/ai/__fixtures__/sample-states";
+import liveSample from "@/lib/ai/__fixtures__/live-sample.json";
 import { getState } from "@/lib/storage";
 import type { Importance, Issue, RadarState } from "@/lib/types";
 
@@ -29,12 +30,14 @@ function sortIssues(issues: Issue[]): Issue[] {
   );
 }
 
-// Design Ref: §7 — 개발 모드에서만 ?demo=normal|empty|failed|none 으로 샘플 상태를 바꿔 본다.
+// Design Ref: §7 — 개발 모드에서만 ?demo=normal|empty|failed|none|live 로 샘플 상태를 바꿔 본다.
+// live = 2026-10-12 실제 AI 1회 실행 결과 (AI를 다시 부르지 않고 화면을 확인하기 위한 저장본)
 const DEMO_STATES: Record<string, RadarState> = {
   normal: normalState,
   empty: emptyState,
   failed: failedState,
   none: noneState,
+  live: liveSample as RadarState,
 };
 
 export default async function Home({ searchParams }: PageProps<"/">) {
